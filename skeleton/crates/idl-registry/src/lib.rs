@@ -13,6 +13,9 @@ use tokio_stream::{Stream, StreamExt};
 
 pub use skill_synth::{Idl, IdlInstruction, IdlInstructionArg, Program, Skill};
 
+#[cfg(feature = "live-yellowstone")]
+pub mod yellowstone;
+
 /// Events that can be consumed by `IdlRegistry::attach_stream`.
 #[derive(Clone, Debug)]
 pub enum YellowstoneEvent {

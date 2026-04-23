@@ -3,6 +3,10 @@ name = "idl-registry"
 version = "0.0.0"
 edition = "2021"
 
+[features]
+default = []
+live-yellowstone = ["dep:yellowstone-grpc-client", "dep:yellowstone-grpc-proto", "dep:anyhow"]
+
 [dependencies]
 skill-synth = { path = "../skill-synth" }
 tokio = { workspace = true }
@@ -13,3 +17,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 async-trait = { workspace = true }
+anyhow = { version = "1", optional = true }
+yellowstone-grpc-client = { version = "5", optional = true }
+yellowstone-grpc-proto = { version = "5", optional = true }
