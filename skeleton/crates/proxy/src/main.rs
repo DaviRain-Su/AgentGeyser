@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use idl_registry::{IdlRegistry, MockYellowstoneStream, YellowstoneEvent};
+use idl_registry::{register_spl_token_transfer_skill, IdlRegistry, MockYellowstoneStream, YellowstoneEvent};
 use proxy::{router, sample_hello_idl, AppState, DEMO_PROGRAM_ID};
 
 #[tokio::main]
@@ -28,7 +28,9 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(feature = "live-yellowstone")]
         {
             tracing::info!(mode = "live", "agentgeyser proxy starting");
-            let registry = Arc::new(IdlRegistry::with_rpc_url(rpc_url.clone().unwrap()));
+            let mut registry = IdlRegistry::with_rpc_url(rpc_url.clone().unwrap());
+            register_spl_token_transfer_skill(&mut registry);
+            let registry = Arc::new(registry);
             let cfg = idl_registry::yellowstone::YellowstoneConfig {
                 endpoint: endpoint.clone().unwrap(),
                 token: token.clone(),
@@ -40,7 +42,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     tracing::info!(mode = "mock", "agentgeyser proxy starting");
-    let registry = Arc::new(IdlRegistry::new());
+    let mut registry = IdlRegistry::new();
+    register_spl_token_transfer_skill(&mut registry);
+    let registry = Arc::new(registry);
     registry.insert_mock_idl(DEMO_PROGRAM_ID, sample_hello_idl());
 
     let stream = MockYellowstoneStream::new(vec![YellowstoneEvent::ProgramDeployed {

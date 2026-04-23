@@ -17,6 +17,9 @@ pub use skill_synth::{Idl, IdlInstruction, IdlInstructionArg, Program, Skill};
 pub mod yellowstone;
 
 pub mod anchor_idl;
+pub mod native_skills;
+
+pub use native_skills::register_spl_token_transfer_skill;
 
 /// Events that can be consumed by `IdlRegistry::attach_stream`.
 #[derive(Clone, Debug)]
