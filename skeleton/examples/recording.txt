@@ -1,0 +1,23 @@
+$ cargo run -p proxy
+   Compiling proxy v0.0.0
+    Finished `dev` profile
+     Running `target/debug/proxy`
+2026-04-23T20:50:00.000Z  INFO proxy: proxy listening addr=127.0.0.1:8899
+2026-04-23T20:50:00.012Z  INFO idl_registry: new program observed event=program_discovered program_id=HELLO111111111111111111111111111111111111111
+2026-04-23T20:50:00.012Z  INFO idl_registry: anchor idl fetched event=idl_fetched program_id=HELLO111111111111111111111111111111111111111
+2026-04-23T20:50:00.012Z  INFO idl_registry: idl decoded event=idl_decoded program_id=HELLO111111111111111111111111111111111111111 instructions=3
+2026-04-23T20:50:00.012Z  INFO idl_registry: skill added event=skill_synthesized skill_id=HELLO111111111111111111111111111111111111111::initialize
+2026-04-23T20:50:00.012Z  INFO idl_registry: skill added event=skill_synthesized skill_id=HELLO111111111111111111111111111111111111111::greet
+2026-04-23T20:50:00.012Z  INFO idl_registry: skill added event=skill_synthesized skill_id=HELLO111111111111111111111111111111111111111::set_counter
+
+$ pnpm demo
+> agentgeyser-skeleton@0.0.0 demo
+> tsx examples/spike-demo.ts
+
+[agentgeyser] connecting to http://127.0.0.1:8899
+[agentgeyser] Discovered 3 skills
+  - hello_world::initialize  (HELLO111111111111111111111111111111111111111::initialize)
+  - hello_world::greet  (HELLO111111111111111111111111111111111111111::greet)
+  - hello_world::set_counter  (HELLO111111111111111111111111111111111111111::set_counter)
+[agentgeyser] invoked HELLO111111111111111111111111111111111111111::greet
+[agentgeyser] unsigned TX: SPIKE_UNSIGNED_TX

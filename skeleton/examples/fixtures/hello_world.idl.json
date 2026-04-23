@@ -1,0 +1,28 @@
+{
+  "version": "0.1.0",
+  "name": "hello_world",
+  "instructions": [
+    {
+      "name": "initialize",
+      "args": [
+        { "name": "authority", "kind": "publicKey" }
+      ]
+    },
+    {
+      "name": "greet",
+      "args": [
+        { "name": "name", "kind": "string" }
+      ]
+    },
+    {
+      "name": "set_counter",
+      "args": [
+        { "name": "value", "kind": "u64" }
+      ]
+    }
+  ],
+  "metadata": {
+    "program_id": "HELLO111111111111111111111111111111111111111",
+    "description": "Minimal AgentGeyser Spike fixture IDL used by examples and tests."
+  }
+}

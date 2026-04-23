@@ -1,0 +1,9 @@
+{
+  "name": "@agentgeyser/mcp-client",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'mcp-client stub: skipped'",
+    "test": "echo 'mcp-client stub: no tests'"
+  }
+}
