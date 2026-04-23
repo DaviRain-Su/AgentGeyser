@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 default = []
-live-yellowstone = ["dep:yellowstone-grpc-client", "dep:yellowstone-grpc-proto", "dep:anyhow"]
+live-yellowstone = ["dep:yellowstone-grpc-client", "dep:yellowstone-grpc-proto"]
 
 [dependencies]
 skill-synth = { path = "../skill-synth" }
@@ -17,6 +17,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 async-trait = { workspace = true }
-anyhow = { version = "1", optional = true }
+anyhow = { workspace = true }
+reqwest = { workspace = true }
+base64 = { workspace = true }
+flate2 = "1"
+bs58 = "0.5"
 yellowstone-grpc-client = { version = "5", optional = true }
 yellowstone-grpc-proto = { version = "5", optional = true }

@@ -1809,8 +1809,12 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
+ "bs58",
  "dashmap",
+ "flate2",
  "futures",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "skill-synth",
