@@ -16,7 +16,10 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use flate2::read::ZlibDecoder;
 use serde_json::Value;
 
-pub use skill_synth::Idl;
+pub use skill_synth::{
+    compute_anchor_discriminator, Idl, IdlAccount, IdlInstruction, IdlInstructionArg, IdlPda,
+    IdlType,
+};
 
 const DISCRIMINATOR_LEN: usize = 8;
 const AUTHORITY_LEN: usize = 32;
@@ -135,5 +138,34 @@ mod tests {
     fn validate_program_id_requires_32_bytes() {
         let err = validate_program_id("abc").unwrap_err();
         assert!(err.to_string().contains("32 bytes"));
+    }
+
+    fn build_fixture_for(idl_json: &serde_json::Value) -> Vec<u8> {
+        let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
+        enc.write_all(&serde_json::to_vec(idl_json).unwrap()).unwrap();
+        let compressed = enc.finish().unwrap();
+        let mut buf = vec![0u8; HEADER_LEN];
+        buf[HEADER_LEN - 4..].copy_from_slice(&(compressed.len() as u32).to_le_bytes());
+        buf.extend_from_slice(&compressed);
+        buf
+    }
+
+    #[test]
+    fn decode_anchor_idl_v030_with_discriminator_and_accounts() {
+        let idl_json = serde_json::json!({
+            "version": "0.1.0", "name": "hello_world",
+            "address": "HELLO111111111111111111111111111111111111111",
+            "instructions": [{
+                "name": "greet", "discriminator": [10,20,30,40,50,60,70,80],
+                "accounts": [{ "name": "user", "isMut": true, "isSigner": true }],
+                "args": [{ "name": "name", "type": "string" }]
+            }]
+        });
+        let idl = decode_anchor_idl_payload(&build_fixture_for(&idl_json)).expect("decode");
+        assert_eq!(idl.address.as_deref(), Some("HELLO111111111111111111111111111111111111111"));
+        let ix = &idl.instructions[0];
+        assert_eq!(ix.discriminator, Some([10,20,30,40,50,60,70,80]));
+        assert_eq!(ix.accounts.len(), 1);
+        assert!(ix.accounts[0].is_mut && ix.accounts[0].is_signer);
     }
 }

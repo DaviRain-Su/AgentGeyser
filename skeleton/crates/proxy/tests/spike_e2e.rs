@@ -12,9 +12,10 @@ fn fixture_idl() -> Idl {
         version: "0.1.0".into(),
         name: "hello_world".into(),
         instructions: vec![
-            IdlInstruction { name: "greet".into(), args: vec![IdlInstructionArg { name: "name".into(), kind: "string".into() }] },
-            IdlInstruction { name: "set_counter".into(), args: vec![IdlInstructionArg { name: "value".into(), kind: "u64".into() }] },
+            IdlInstruction { name: "greet".into(), args: vec![IdlInstructionArg { name: "name".into(), kind: "string".into(), ..Default::default() }], ..Default::default() },
+            IdlInstruction { name: "set_counter".into(), args: vec![IdlInstructionArg { name: "value".into(), kind: "u64".into(), ..Default::default() }], ..Default::default() },
         ],
+        ..Default::default()
     }
 }
 

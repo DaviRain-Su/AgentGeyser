@@ -86,17 +86,21 @@ pub fn sample_hello_idl() -> Idl {
         instructions: vec![
             IdlInstruction {
                 name: "initialize".into(),
-                args: vec![IdlInstructionArg { name: "authority".into(), kind: "publicKey".into() }],
+                args: vec![IdlInstructionArg { name: "authority".into(), kind: "publicKey".into(), ..Default::default() }],
+                ..Default::default()
             },
             IdlInstruction {
                 name: "greet".into(),
-                args: vec![IdlInstructionArg { name: "name".into(), kind: "string".into() }],
+                args: vec![IdlInstructionArg { name: "name".into(), kind: "string".into(), ..Default::default() }],
+                ..Default::default()
             },
             IdlInstruction {
                 name: "set_counter".into(),
-                args: vec![IdlInstructionArg { name: "value".into(), kind: "u64".into() }],
+                args: vec![IdlInstructionArg { name: "value".into(), kind: "u64".into(), ..Default::default() }],
+                ..Default::default()
             },
         ],
+        ..Default::default()
     }
 }
 
