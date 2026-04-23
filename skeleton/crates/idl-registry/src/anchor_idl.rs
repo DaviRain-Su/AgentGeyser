@@ -36,6 +36,10 @@ pub fn validate_program_id(s: &str) -> Result<String> {
 }
 
 /// Decode a raw Anchor IDL account payload into an `Idl`. Pure (no I/O).
+///
+/// For every instruction whose JSON did not provide a v0.30+ `discriminator`
+/// field, the missing slot is filled in with `compute_anchor_discriminator`
+/// so downstream consumers can treat the `Idl` as fully populated.
 pub fn decode_anchor_idl_payload(bytes: &[u8]) -> Result<Idl> {
     if bytes.len() < HEADER_LEN {
         return Err(anyhow!("anchor idl account too short: {} bytes", bytes.len()));
@@ -51,7 +55,13 @@ pub fn decode_anchor_idl_payload(bytes: &[u8]) -> Result<Idl> {
     ZlibDecoder::new(compressed)
         .read_to_end(&mut json)
         .context("zlib inflate failed")?;
-    serde_json::from_slice::<Idl>(&json).context("anchor idl json parse failed")
+    let mut idl: Idl = serde_json::from_slice(&json).context("anchor idl json parse failed")?;
+    for ix in idl.instructions.iter_mut() {
+        if ix.discriminator.is_none() {
+            ix.discriminator = Some(compute_anchor_discriminator(&ix.name));
+        }
+    }
+    Ok(idl)
 }
 
 /// Fetch the Anchor IDL account via JSON-RPC `getAccountInfo` and decode it.
@@ -148,6 +158,31 @@ mod tests {
         buf[HEADER_LEN - 4..].copy_from_slice(&(compressed.len() as u32).to_le_bytes());
         buf.extend_from_slice(&compressed);
         buf
+    }
+
+    #[test]
+    fn discriminator_from_idl_v030() {
+        // F3.3: when the IDL JSON carries an explicit v0.30+ `discriminator`,
+        // decode preserves the byte array verbatim instead of recomputing it.
+        let idl_json = serde_json::json!({
+            "version": "0.1.0", "name": "fake",
+            "instructions": [{
+                "name": "fake_ix",
+                "discriminator": [1, 2, 3, 4, 5, 6, 7, 8],
+                "args": []
+            }]
+        });
+        let idl = decode_anchor_idl_payload(&build_fixture_for(&idl_json)).expect("decode");
+        assert_eq!(idl.instructions[0].discriminator, Some([1, 2, 3, 4, 5, 6, 7, 8]));
+    }
+
+    #[test]
+    fn discriminator_fallback_sha256() {
+        // F3.4: canonical Anchor sha256("global:initialize")[..8] value.
+        assert_eq!(
+            compute_anchor_discriminator("initialize"),
+            [175, 175, 109, 31, 13, 152, 155, 237]
+        );
     }
 
     #[test]
