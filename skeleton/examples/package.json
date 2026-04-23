@@ -1,0 +1,13 @@
+{
+  "name": "agentgeyser-examples",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "tsx": "^4",
+    "@types/node": "^20"
+  }
+}
