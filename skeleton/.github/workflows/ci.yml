@@ -14,8 +14,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Cargo check workspace
-        run: cargo check --workspace
+      - name: Cargo check workspace (all features)
+        run: cargo check --workspace --all-features
+        working-directory: skeleton
+      - name: Cargo test workspace
+        run: cargo test --workspace
         working-directory: skeleton
       - name: Build pnpm workspace
         run: pnpm -r build
