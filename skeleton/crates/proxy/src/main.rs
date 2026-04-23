@@ -14,6 +14,32 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    let endpoint = std::env::var("AGENTGEYSER_YELLOWSTONE_ENDPOINT").ok();
+    let token = std::env::var("AGENTGEYSER_YELLOWSTONE_TOKEN").ok();
+    let rpc_url = std::env::var("AGENTGEYSER_RPC_URL").ok();
+    let live_env = endpoint.is_some() && token.is_some() && rpc_url.is_some();
+
+    #[cfg(feature = "live-yellowstone")]
+    let live_feature = true;
+    #[cfg(not(feature = "live-yellowstone"))]
+    let live_feature = false;
+
+    if live_env && live_feature {
+        #[cfg(feature = "live-yellowstone")]
+        {
+            tracing::info!(mode = "live", "agentgeyser proxy starting");
+            let registry = Arc::new(IdlRegistry::with_rpc_url(rpc_url.clone().unwrap()));
+            let cfg = idl_registry::yellowstone::YellowstoneConfig {
+                endpoint: endpoint.clone().unwrap(),
+                token: token.clone(),
+            };
+            let stream = idl_registry::yellowstone::connect_stream(cfg).await?;
+            registry.attach_stream(stream);
+            return serve(registry).await;
+        }
+    }
+
+    tracing::info!(mode = "mock", "agentgeyser proxy starting");
     let registry = Arc::new(IdlRegistry::new());
     registry.insert_mock_idl(DEMO_PROGRAM_ID, sample_hello_idl());
 
@@ -24,6 +50,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Give the spawned task a moment to drain events before accepting requests.
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    serve(registry).await
+}
+
+async fn serve(registry: Arc<IdlRegistry>) -> anyhow::Result<()> {
 
     let app = router(AppState {
         registry: Arc::clone(&registry),

@@ -10,6 +10,10 @@ path = "src/lib.rs"
 name = "proxy"
 path = "src/main.rs"
 
+[features]
+default = []
+live-yellowstone = ["idl-registry/live-yellowstone"]
+
 [dependencies]
 idl-registry = { path = "../idl-registry" }
 skill-synth = { path = "../skill-synth" }
