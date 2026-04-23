@@ -33,11 +33,22 @@ pub struct IdlRegistry {
     /// Mock Anchor IDL table used by the Spike integration tests and demo.
     /// Keyed by program_id → IDL. Production will be replaced by RPC lookup.
     pub mock_idls: Arc<DashMap<String, Idl>>,
+    /// Optional Solana JSON-RPC endpoint used when no mock IDL is found.
+    pub rpc_url: Option<String>,
 }
 
 impl IdlRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Construct a registry that falls back to an on-chain Anchor IDL fetch
+    /// when no mock is registered. The mock path still wins when both exist.
+    pub fn with_rpc_url(url: impl Into<String>) -> Self {
+        Self {
+            rpc_url: Some(url.into()),
+            ..Self::default()
+        }
     }
 
     /// Insert a mock IDL that will be served by `try_fetch_anchor_idl`.
@@ -112,10 +123,22 @@ impl IdlRegistry {
         }
     }
 
-    /// Mock-only Anchor IDL lookup. Production would query the Anchor IDL PDA
-    /// via RPC; the Spike only consults `mock_idls`.
+    /// Anchor IDL lookup. Mock table always wins; if none is registered and
+    /// `rpc_url` is configured, fall back to an on-chain fetch.
     pub async fn try_fetch_anchor_idl(&self, program_id: &str) -> Option<Idl> {
-        self.mock_idls.get(program_id).map(|e| e.value().clone())
+        if let Some(idl) = self.mock_idls.get(program_id).map(|e| e.value().clone()) {
+            return Some(idl);
+        }
+        if let Some(url) = self.rpc_url.as_deref() {
+            match anchor_idl::fetch_anchor_idl(url, program_id).await {
+                Ok(opt) => return opt,
+                Err(err) => {
+                    tracing::warn!(%program_id, error = %err, "anchor idl rpc fetch failed");
+                    return None;
+                }
+            }
+        }
+        None
     }
 }
 
@@ -173,5 +196,52 @@ mod tests {
         ]);
         registry.attach_stream(stream).await.unwrap();
         assert!(registry.list_skills().is_empty());
+    }
+
+    #[tokio::test]
+    async fn mock_wins_over_rpc() {
+        // rpc_url points at an unroutable TCP port; if the mock path is ever
+        // bypassed the fetch would error, but we assert skills are populated.
+        let registry = Arc::new(IdlRegistry::with_rpc_url("http://127.0.0.1:1/"));
+        let pid = "HELLO111111111111111111111111111111111111111";
+        registry.insert_mock_idl(pid, sample_idl());
+        let stream = MockYellowstoneStream::new(vec![
+            YellowstoneEvent::ProgramDeployed { program_id: pid.into() },
+        ]);
+        registry.attach_stream(stream).await.unwrap();
+        let skills = registry.list_skills();
+        assert_eq!(skills.len(), 2, "mock path must populate skills");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn rpc_path_used_when_no_mock() {
+        use base64::Engine as _;
+        use flate2::{write::ZlibEncoder, Compression};
+        use std::io::Write;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let idl = serde_json::json!({"version":"0.1.0","name":"rpc_hello",
+            "instructions":[{"name":"ping","args":[]}]});
+        let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
+        enc.write_all(&serde_json::to_vec(&idl).unwrap()).unwrap();
+        let zbody = enc.finish().unwrap();
+        let mut acct = vec![0u8; 8];
+        acct.extend_from_slice(&[1u8; 32]);
+        acct.extend_from_slice(&(zbody.len() as u32).to_le_bytes());
+        acct.extend_from_slice(&zbody);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&acct);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut s, _) = listener.accept().await.unwrap();
+            let _ = s.read(&mut [0u8; 4096]).await.unwrap();
+            let body = format!("{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{\"context\":{{\"slot\":1}},\"value\":{{\"data\":[\"{}\",\"base64\"],\"executable\":false,\"lamports\":0,\"owner\":\"11111111111111111111111111111111\",\"rentEpoch\":0}}}}}}", b64);
+            let resp = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body);
+            s.write_all(resp.as_bytes()).await.unwrap();
+        });
+        let registry = Arc::new(IdlRegistry::with_rpc_url(format!("http://127.0.0.1:{}/", port)));
+        let pid = "11111111111111111111111111111111";
+        let stream = MockYellowstoneStream::new(vec![YellowstoneEvent::ProgramDeployed { program_id: pid.into() }]);
+        registry.attach_stream(stream).await.unwrap();
+        assert_eq!(registry.list_skills()[0].instruction_name, "ping");
     }
 }
