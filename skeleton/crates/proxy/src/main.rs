@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
             };
             let stream = idl_registry::yellowstone::connect_stream(cfg).await?;
             registry.attach_stream(stream);
-            return serve(registry).await;
+            return serve(registry, rpc_url).await;
         }
     }
 
@@ -50,13 +50,14 @@ async fn main() -> anyhow::Result<()> {
 
     // Give the spawned task a moment to drain events before accepting requests.
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    serve(registry).await
+    serve(registry, rpc_url).await
 }
 
-async fn serve(registry: Arc<IdlRegistry>) -> anyhow::Result<()> {
+async fn serve(registry: Arc<IdlRegistry>, rpc_url: Option<String>) -> anyhow::Result<()> {
 
     let app = router(AppState {
         registry: Arc::clone(&registry),
+        rpc_url,
     });
 
     let bind = std::env::var("AGENTGEYSER_BIND").unwrap_or_else(|_| "127.0.0.1:8899".to_string());

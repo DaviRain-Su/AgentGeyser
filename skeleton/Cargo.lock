@@ -2651,14 +2651,18 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64 0.22.1",
+ "bincode",
  "idl-registry",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "skill-synth",
+ "solana-sdk",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "tx-builder",
 ]
 
 [[package]]

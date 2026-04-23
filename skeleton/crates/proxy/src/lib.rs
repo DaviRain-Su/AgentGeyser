@@ -1,21 +1,28 @@
-//! AgentGeyser proxy — HTTP JSON-RPC entry point for the Spike.
+//! AgentGeyser proxy — HTTP JSON-RPC entry point.
 //!
 //! Methods: `ag_listSkills`, `ag_getIdl`, `ag_invokeSkill`.
-//! `ag_invokeSkill` returns an unsigned placeholder transaction (non-custodial
-//! invariant: the proxy never signs anything).
+//! `ag_invokeSkill` returns real (unsigned) Solana transaction bytes via
+//! `tx-builder`. Non-custodial invariant: the proxy never signs anything.
 
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::{extract::State, routing::post, Json, Router};
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use idl_registry::{Idl, IdlInstruction, IdlInstructionArg, IdlRegistry};
 use serde::Deserialize;
 use serde_json::{json, Value};
-
-pub const UNSIGNED_TX_PLACEHOLDER: &str = "SPIKE_UNSIGNED_TX";
+use solana_sdk::{
+    hash::Hash,
+    instruction::AccountMeta,
+    pubkey::Pubkey,
+};
 
 #[derive(Clone)]
 pub struct AppState {
     pub registry: Arc<IdlRegistry>,
+    pub rpc_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,26 +55,118 @@ async fn rpc_handler(State(st): State<AppState>, Json(req): Json<JsonRpcReq>) ->
                 None => Json(err(id, -32004, "idl not found")),
             }
         }
-        "ag_invokeSkill" => {
-            let skill_id = req
-                .params
-                .get("skill_id")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            if skill_id.is_empty() || !st.registry.has_skill(&skill_id) {
-                return Json(err(id, -32004, "skill not found"));
-            }
-            Json(ok(
-                id,
-                json!({
-                    "skill_id": skill_id,
-                    "transaction_base64": UNSIGNED_TX_PLACEHOLDER
-                }),
-            ))
-        }
+        "ag_invokeSkill" => match handle_invoke(&st, &req.params).await {
+            Ok(result) => Json(ok(id, result)),
+            Err((code, msg)) => Json(err(id, code, &msg)),
+        },
         _ => Json(err(id, -32601, "method not found")),
     }
+}
+
+async fn handle_invoke(st: &AppState, params: &Value) -> Result<Value, (i32, String)> {
+    let skill_id = params
+        .get("skill_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if skill_id.is_empty() {
+        return Err((-32602, "missing skill_id".into()));
+    }
+    let payer_str = params
+        .get("payer")
+        .and_then(Value::as_str)
+        .ok_or((-32602, "missing payer".into()))?;
+    let payer = Pubkey::from_str(payer_str).map_err(|e| (-32602, format!("invalid payer: {e}")))?;
+
+    let accounts_obj = params.get("accounts").cloned().unwrap_or(json!({}));
+    let accounts_map = parse_named_pubkeys(&accounts_obj)?;
+    let args = params.get("args").cloned().unwrap_or(json!({}));
+
+    let blockhash = match &st.rpc_url {
+        Some(url) => fetch_latest_blockhash(url).await
+            .map_err(|e| (-32000, format!("getLatestBlockhash failed: {e}")))?,
+        None => Hash::new_from_array([0u8; 32]),
+    };
+
+    let bytes = if skill_id.starts_with("spl-token::") {
+        let skill = st
+            .registry
+            .skills
+            .get(&skill_id)
+            .map(|e| e.value().clone())
+            .ok_or((-32004, "skill not found".into()))?;
+        let program_id = Pubkey::from_str(&skill.program_id)
+            .map_err(|e| (-32000, format!("invalid skill program_id: {e}")))?;
+        let metas: Vec<AccountMeta> = skill
+            .accounts
+            .iter()
+            .map(|a| {
+                let pk = accounts_map
+                    .get(&a.name)
+                    .copied()
+                    .ok_or((-32602, format!("missing account: {}", a.name)))?;
+                Ok(if a.is_mut && a.is_signer {
+                    AccountMeta::new(pk, true)
+                } else if a.is_mut {
+                    AccountMeta::new(pk, false)
+                } else if a.is_signer {
+                    AccountMeta::new_readonly(pk, true)
+                } else {
+                    AccountMeta::new_readonly(pk, false)
+                })
+            })
+            .collect::<Result<_, (i32, String)>>()?;
+        // skill.discriminator holds the 1-byte tag in slot 0 (padded with zeros);
+        // pack tag + u64 LE amount for the SPL Transfer native path.
+        let amount = args.get("amount").and_then(Value::as_u64)
+            .ok_or((-32602, "missing u64 arg: amount".into()))?;
+        let mut ix_data = vec![skill.discriminator[0]];
+        ix_data.extend_from_slice(&amount.to_le_bytes());
+        tx_builder::build_native_unsigned_tx(program_id, ix_data, metas, payer, blockhash)
+            .map_err(|e| (-32000, format!("tx build failed: {e}")))?
+    } else {
+        if !st.registry.has_skill(&skill_id) {
+            return Err((-32004, "skill not found".into()));
+        }
+        let skill = st.registry.skills.get(&skill_id).map(|e| e.value().clone()).unwrap();
+        tx_builder::build_anchor_unsigned_tx(&skill, &args, &accounts_map, payer, blockhash)
+            .map_err(|e| (-32000, format!("tx build failed: {e}")))?
+    };
+
+    Ok(json!({
+        "skill_id": skill_id,
+        "transaction_base64": B64.encode(bytes),
+    }))
+}
+
+fn parse_named_pubkeys(v: &Value) -> Result<HashMap<String, Pubkey>, (i32, String)> {
+    let obj = v.as_object().ok_or((-32602, "accounts must be object".into()))?;
+    obj.iter()
+        .map(|(k, val)| {
+            let s = val.as_str().ok_or((-32602, format!("account `{k}` must be string")))?;
+            let pk = Pubkey::from_str(s).map_err(|e| (-32602, format!("account `{k}` invalid: {e}")))?;
+            Ok((k.clone(), pk))
+        })
+        .collect()
+}
+
+async fn fetch_latest_blockhash(rpc_url: &str) -> anyhow::Result<Hash> {
+    let body = json!({
+        "jsonrpc": "2.0", "id": 1, "method": "getLatestBlockhash", "params": []
+    });
+    let resp: Value = reqwest::Client::new()
+        .post(rpc_url)
+        .json(&body)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let s = resp
+        .pointer("/result/value/blockhash")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("missing result.value.blockhash"))?;
+    Hash::from_str(s).map_err(|e| anyhow::anyhow!("blockhash parse: {e}"))
 }
 
 fn ok(id: Value, result: Value) -> Value {
