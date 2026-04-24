@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM"],
+    "noEmit": true
+  },
+  "include": [
+    "../../packages/sdk/src/**/*.ts",
+    "../../packages/react/src/**/*.ts",
+    "../../packages/react/src/**/*.tsx"
+  ],
+  "exclude": [
+    "../../packages/sdk/src/__tests__/**",
+    "../../packages/react/src/**/*.test.ts",
+    "../../packages/react/src/**/*.test.tsx"
+  ]
+}

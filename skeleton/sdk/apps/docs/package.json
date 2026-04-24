@@ -1,0 +1,48 @@
+{
+  "name": "@agentgeyser/docs",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "prebuild": "typedoc",
+    "build": "docusaurus build",
+    "start": "docusaurus start",
+    "serve": "docusaurus serve",
+    "clear": "docusaurus clear",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'docs: no unit tests'",
+    "lint": "echo 'lint: noop'"
+  },
+  "dependencies": {
+    "@docusaurus/core": "3.5.2",
+    "@docusaurus/preset-classic": "3.5.2",
+    "@mdx-js/react": "^3.0.0",
+    "clsx": "^2.0.0",
+    "prism-react-renderer": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@docusaurus/module-type-aliases": "3.5.2",
+    "@docusaurus/tsconfig": "3.5.2",
+    "@docusaurus/types": "3.5.2",
+    "@types/react": "^18.3.12",
+    "typedoc": "0.26.11",
+    "typedoc-plugin-markdown": "4.2.10",
+    "typescript": "^5.4.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.5%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "engines": {
+    "node": ">=18.0"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "name": "@agentgeyser/sdk",
+  "version": "0.0.0",
+  "description": "Isomorphic TypeScript client for the AgentGeyser proxy (JSON-RPC 2.0).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js",
+      "default": "./dist/cli.js"
+    }
+  },
+  "bin": {
+    "agentgeyser": "./bin/agentgeyser"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/cli.ts --format esm --dts --clean --out-dir dist",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'lint: noop'"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "cross-fetch": "^4.0.0",
+    "zod": "^3.23.8"
+  },
+  "peerDependencies": {
+    "@solana/web3.js": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@solana/web3.js": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@size-limit/esbuild": "^11.1.6",
+    "@size-limit/file": "^11.1.6",
+    "@vitest/coverage-v8": "^2.1.8",
+    "nock": "^13.5.6",
+    "size-limit": "^11.1.6",
+    "tsup": "^8.3.5",
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "60 KB",
+      "ignore": [
+        "@solana/web3.js",
+        "fs/promises",
+        "node:fs/promises"
+      ]
+    }
+  ]
+}

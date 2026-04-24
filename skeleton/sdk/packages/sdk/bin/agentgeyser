@@ -1,0 +1,15 @@
+#!/usr/bin/env node
+// Thin loader for the `agentgeyser` CLI. Resolves the built `dist/cli.js`
+// relative to this file so `pnpm --filter @agentgeyser/sdk exec agentgeyser`
+// works both from a workspace install and a published tarball.
+import('../dist/cli.js')
+  .then((mod) => mod.run(process.argv))
+  .catch((err) => {
+    // commander's `--help` / `--version` paths surface as a `CommanderError`
+    // with a zero-or-positive `exitCode`; honor it instead of treating as a crash.
+    if (err && typeof err === 'object' && 'exitCode' in err) {
+      process.exit(Number(err.exitCode) || 0);
+    }
+    console.error(err instanceof Error ? err.stack ?? err.message : String(err));
+    process.exit(1);
+  });

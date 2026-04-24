@@ -1,0 +1,16 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "../../packages/sdk/src/index.ts",
+    "../../packages/react/src/index.ts"
+  ],
+  "entryPointStrategy": "expand",
+  "tsconfig": "./tsconfig.typedoc.json",
+  "plugin": ["typedoc-plugin-markdown"],
+  "out": "docs/api",
+  "hideBreadcrumbs": true,
+  "readme": "none",
+  "sort": ["alphabetical"],
+  "disableSources": true,
+  "githubPages": false
+}

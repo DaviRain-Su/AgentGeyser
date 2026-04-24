@@ -1,0 +1,58 @@
+{
+  "name": "@agentgeyser/react",
+  "version": "0.0.0",
+  "description": "React hooks for the AgentGeyser SDK (non-custodial; wallet adapter bound).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts",
+    "test": "vitest run",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'lint: noop'"
+  },
+  "dependencies": {
+    "@agentgeyser/sdk": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "@solana/wallet-adapter-react": "^0.15.0"
+  },
+  "peerDependenciesMeta": {
+    "@solana/wallet-adapter-react": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^18.3.12",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^25.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@solana/wallet-adapter-react": "^0.15.35",
+    "@solana/web3.js": "^2.0.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.4.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
