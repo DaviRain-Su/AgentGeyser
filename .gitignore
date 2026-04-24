@@ -7,3 +7,4 @@ dist/
 .env.*
 mission-fixtures/
 skeleton/examples/.surfpool-state.json
+skeleton/sdk/packages/sdk/test-devnet/.surfpool-state.json

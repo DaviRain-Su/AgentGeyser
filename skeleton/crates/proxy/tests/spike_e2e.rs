@@ -4,7 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
-use idl_registry::{Idl, IdlInstruction, IdlInstructionArg, IdlRegistry, MockYellowstoneStream, YellowstoneEvent};
+use idl_registry::{
+    Idl, IdlInstruction, IdlInstructionArg, IdlRegistry, MockYellowstoneStream, YellowstoneEvent,
+};
 use proxy::{router, AppState};
 use serde_json::{json, Value};
 use solana_sdk::transaction::Transaction;
@@ -14,8 +16,24 @@ fn fixture_idl() -> Idl {
         version: "0.1.0".into(),
         name: "hello_world".into(),
         instructions: vec![
-            IdlInstruction { name: "greet".into(), args: vec![IdlInstructionArg { name: "name".into(), kind: "string".into(), ..Default::default() }], ..Default::default() },
-            IdlInstruction { name: "set_counter".into(), args: vec![IdlInstructionArg { name: "value".into(), kind: "u64".into(), ..Default::default() }], ..Default::default() },
+            IdlInstruction {
+                name: "greet".into(),
+                args: vec![IdlInstructionArg {
+                    name: "name".into(),
+                    kind: "string".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            IdlInstruction {
+                name: "set_counter".into(),
+                args: vec![IdlInstructionArg {
+                    name: "value".into(),
+                    kind: "u64".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
         ],
         ..Default::default()
     }
@@ -37,7 +55,10 @@ async fn end_to_end_spike_flow() {
     // 2. Launch the axum proxy on an ephemeral port (mock mode → deterministic fake blockhash).
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let app = router(AppState { registry: Arc::clone(&registry), rpc_url: None });
+    let app = router(AppState {
+        registry: Arc::clone(&registry),
+        rpc_url: None,
+    });
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
@@ -65,7 +86,11 @@ async fn end_to_end_spike_flow() {
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    assert!(skills.len() >= 2, "expected >=2 skills, got {}", skills.len());
+    assert!(
+        skills.len() >= 2,
+        "expected >=2 skills, got {}",
+        skills.len()
+    );
 
     // 4. Invoke `set_counter` (deterministic u64 arg, no accounts).
     let target_id = format!("{}::set_counter", program_id);
@@ -91,7 +116,9 @@ async fn end_to_end_spike_flow() {
         .await
         .unwrap();
     assert_eq!(resp["result"]["skill_id"], Value::String(target_id.clone()));
-    let tx_b64 = resp["result"]["transaction_base64"].as_str().expect("base64 string");
+    let tx_b64 = resp["result"]["transaction_base64"]
+        .as_str()
+        .expect("base64 string");
     let raw = B64.decode(tx_b64).expect("base64 decode");
     let tx: Transaction = bincode::deserialize(&raw).expect("bincode decode Transaction");
     assert_eq!(tx.message.instructions.len(), 1);

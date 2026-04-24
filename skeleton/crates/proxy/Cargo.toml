@@ -16,6 +16,7 @@ live-yellowstone = ["idl-registry/live-yellowstone"]
 
 [dependencies]
 idl-registry = { path = "../idl-registry" }
+nl-planner = { path = "../nl-planner" }
 skill-synth = { path = "../skill-synth" }
 tx-builder = { path = "../tx-builder" }
 tokio = { workspace = true }

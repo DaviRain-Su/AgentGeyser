@@ -1,6 +1,6 @@
 {
   "name": "@agentgeyser/sdk",
-  "version": "0.1.0-alpha.0",
+  "version": "0.2.0-alpha.0",
   "description": "Isomorphic TypeScript client for the AgentGeyser proxy (JSON-RPC 2.0).",
   "license": "MIT",
   "author": "DaviRain-Su",
@@ -49,6 +49,7 @@
   "scripts": {
     "build": "tsup src/index.ts src/cli.ts --format esm --dts --clean --out-dir dist",
     "test": "vitest run",
+    "test:devnet": "bash test-devnet/run.sh",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'lint: noop'"
   },

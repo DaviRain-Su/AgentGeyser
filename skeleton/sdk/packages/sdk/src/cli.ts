@@ -7,7 +7,13 @@
 
 import { Command, type Command as CommanderCommand } from 'commander';
 import { AgentGeyserClient } from './client.js';
-import { signAndSend } from './signAndSend.js';
+
+// Minimal ambient declaration — tsconfig sets `types: []` so we don't pull in
+// all of `@types/node`. Only `process` is needed by this CLI entry.
+declare const process: {
+  argv: string[];
+  stdout: { write(chunk: string): boolean };
+};
 
 export const DEFAULT_PROXY_URL = 'http://127.0.0.1:8999';
 export const DEFAULT_RPC_URL = 'http://127.0.0.1:8899';
@@ -57,9 +63,12 @@ export const defaultHandlers: CliHandlers = {
       process.stdout.write(`${JSON.stringify({ transactionBase64 }, null, 2)}\n`);
       return;
     }
-    if (!opts.keypair) throw new Error('--sign requires --keypair <path>');
-    const result = await signAndSend({ client, transactionBase64, keypairPath: opts.keypair, rpcUrl: opts.rpcUrl });
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    // Non-custodial library: disk-keypair signing lives in the F12 e2e harness,
+    // not in `@agentgeyser/sdk`. Consumers call `signAndSend` directly with
+    // their own wallet-adapter or local-keypair-derived signer.
+    throw new Error(
+      '--sign is not available from the SDK CLI (non-custodial); use the F12 e2e harness or call signAndSend() with your own Signer.',
+    );
   },
 };
 

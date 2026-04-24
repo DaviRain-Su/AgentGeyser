@@ -1,8 +1,10 @@
 //! AgentGeyser proxy — HTTP JSON-RPC entry point.
 //!
-//! Methods: `ag_listSkills`, `ag_getIdl`, `ag_invokeSkill`.
+//! Methods: `ag_listSkills`, `ag_getIdl`, `ag_invokeSkill`, `ag_planAction`.
 //! `ag_invokeSkill` returns real (unsigned) Solana transaction bytes via
 //! `tx-builder`. Non-custodial invariant: the proxy never signs anything.
+
+pub mod rpc;
 
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -13,11 +15,7 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use idl_registry::{Idl, IdlInstruction, IdlInstructionArg, IdlRegistry};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use solana_sdk::{
-    hash::Hash,
-    instruction::AccountMeta,
-    pubkey::Pubkey,
-};
+use solana_sdk::{hash::Hash, instruction::AccountMeta, pubkey::Pubkey};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -37,13 +35,18 @@ pub struct JsonRpcReq {
 
 /// Build the axum `Router` backed by an `AppState`.
 pub fn router(state: AppState) -> Router {
-    Router::new().route("/", post(rpc_handler)).with_state(state)
+    Router::new()
+        .route("/", post(rpc_handler))
+        .with_state(state)
 }
 
 async fn rpc_handler(State(st): State<AppState>, Json(req): Json<JsonRpcReq>) -> Json<Value> {
     let id = req.id.clone();
     match req.method.as_str() {
-        "ag_listSkills" => Json(ok(id, serde_json::to_value(st.registry.list_skills()).unwrap_or(Value::Null))),
+        "ag_listSkills" => Json(ok(
+            id,
+            serde_json::to_value(st.registry.list_skills()).unwrap_or(Value::Null),
+        )),
         "ag_getIdl" => {
             let program_id = req
                 .params
@@ -55,7 +58,11 @@ async fn rpc_handler(State(st): State<AppState>, Json(req): Json<JsonRpcReq>) ->
                 None => Json(err(id, -32004, "idl not found")),
             }
         }
-        "ag_invokeSkill" => match handle_invoke(&st, &req.params).await {
+        "ag_invokeSkill" => match rpc::invoke_skill::handle_invoke_skill(&st, &req.params).await {
+            Ok(result) => Json(ok(id, result)),
+            Err((code, msg)) => Json(err(id, code, &msg)),
+        },
+        "ag_planAction" => match rpc::plan_action::handle_plan_action(&req.params).await {
             Ok(result) => Json(ok(id, result)),
             Err((code, msg)) => Json(err(id, code, &msg)),
         },
@@ -63,7 +70,7 @@ async fn rpc_handler(State(st): State<AppState>, Json(req): Json<JsonRpcReq>) ->
     }
 }
 
-async fn handle_invoke(st: &AppState, params: &Value) -> Result<Value, (i32, String)> {
+pub async fn handle_invoke_legacy(st: &AppState, params: &Value) -> Result<Value, (i32, String)> {
     let skill_id = params
         .get("skill_id")
         .and_then(Value::as_str)
@@ -83,7 +90,8 @@ async fn handle_invoke(st: &AppState, params: &Value) -> Result<Value, (i32, Str
     let args = params.get("args").cloned().unwrap_or(json!({}));
 
     let blockhash = match &st.rpc_url {
-        Some(url) => fetch_latest_blockhash(url).await
+        Some(url) => fetch_latest_blockhash(url)
+            .await
             .map_err(|e| (-32000, format!("getLatestBlockhash failed: {e}")))?,
         None => Hash::new_from_array([0u8; 32]),
     };
@@ -118,7 +126,9 @@ async fn handle_invoke(st: &AppState, params: &Value) -> Result<Value, (i32, Str
             .collect::<Result<_, (i32, String)>>()?;
         // skill.discriminator holds the 1-byte tag in slot 0 (padded with zeros);
         // pack tag + u64 LE amount for the SPL Transfer native path.
-        let amount = args.get("amount").and_then(Value::as_u64)
+        let amount = args
+            .get("amount")
+            .and_then(Value::as_u64)
             .ok_or((-32602, "missing u64 arg: amount".into()))?;
         let mut ix_data = vec![skill.discriminator[0]];
         ix_data.extend_from_slice(&amount.to_le_bytes());
@@ -137,7 +147,12 @@ async fn handle_invoke(st: &AppState, params: &Value) -> Result<Value, (i32, Str
                 return Err((-32004, "skill not found".into()));
             }
         }
-        let skill = st.registry.skills.get(&skill_id).map(|e| e.value().clone()).unwrap();
+        let skill = st
+            .registry
+            .skills
+            .get(&skill_id)
+            .map(|e| e.value().clone())
+            .unwrap();
         tx_builder::build_anchor_unsigned_tx(&skill, &args, &accounts_map, payer, blockhash)
             .map_err(|e| (-32000, format!("tx build failed: {e}")))?
     };
@@ -149,11 +164,16 @@ async fn handle_invoke(st: &AppState, params: &Value) -> Result<Value, (i32, Str
 }
 
 fn parse_named_pubkeys(v: &Value) -> Result<HashMap<String, Pubkey>, (i32, String)> {
-    let obj = v.as_object().ok_or((-32602, "accounts must be object".into()))?;
+    let obj = v
+        .as_object()
+        .ok_or((-32602, "accounts must be object".into()))?;
     obj.iter()
         .map(|(k, val)| {
-            let s = val.as_str().ok_or((-32602, format!("account `{k}` must be string")))?;
-            let pk = Pubkey::from_str(s).map_err(|e| (-32602, format!("account `{k}` invalid: {e}")))?;
+            let s = val
+                .as_str()
+                .ok_or((-32602, format!("account `{k}` must be string")))?;
+            let pk =
+                Pubkey::from_str(s).map_err(|e| (-32602, format!("account `{k}` invalid: {e}")))?;
             Ok((k.clone(), pk))
         })
         .collect()
@@ -194,17 +214,26 @@ pub fn sample_hello_idl() -> Idl {
         instructions: vec![
             IdlInstruction {
                 name: "initialize".into(),
-                args: vec![IdlInstructionArg { name: "authority".into(), kind: "publicKey".into() }],
+                args: vec![IdlInstructionArg {
+                    name: "authority".into(),
+                    kind: "publicKey".into(),
+                }],
                 ..Default::default()
             },
             IdlInstruction {
                 name: "greet".into(),
-                args: vec![IdlInstructionArg { name: "name".into(), kind: "string".into() }],
+                args: vec![IdlInstructionArg {
+                    name: "name".into(),
+                    kind: "string".into(),
+                }],
                 ..Default::default()
             },
             IdlInstruction {
                 name: "set_counter".into(),
-                args: vec![IdlInstructionArg { name: "value".into(), kind: "u64".into() }],
+                args: vec![IdlInstructionArg {
+                    name: "value".into(),
+                    kind: "u64".into(),
+                }],
                 ..Default::default()
             },
         ],

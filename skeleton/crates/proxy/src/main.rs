@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use idl_registry::{register_spl_token_transfer_skill, IdlRegistry, MockYellowstoneStream, YellowstoneEvent};
+use idl_registry::{
+    register_spl_token_transfer_skill, IdlRegistry, MockYellowstoneStream, YellowstoneEvent,
+};
 use proxy::{router, sample_hello_idl, AppState, DEMO_PROGRAM_ID};
 
 #[tokio::main]
@@ -61,7 +63,6 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn serve(registry: Arc<IdlRegistry>, rpc_url: Option<String>) -> anyhow::Result<()> {
-
     let app = router(AppState {
         registry: Arc::clone(&registry),
         rpc_url,

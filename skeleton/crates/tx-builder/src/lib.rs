@@ -13,6 +13,14 @@
 //! Output is `bincode::serialize(&Transaction)` bytes ready for an external
 //! wallet to attach the payer signature.
 
+pub mod devnet_gate;
+pub mod spl_token;
+
+pub use spl_token::{
+    build_spl_token_transfer, SplTokenTransferArgs, TxBuilderError, UnsignedTx,
+    TOKEN_2022_PROGRAM_ID,
+};
+
 use anyhow::{anyhow, Context, Result};
 use borsh::BorshSerialize;
 use serde_json::Value;

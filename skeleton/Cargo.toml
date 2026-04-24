@@ -1,10 +1,10 @@
 [workspace]
 members = [
+  "crates/nl-planner",
   "crates/proxy",
   "crates/idl-registry",
   "crates/skill-synth",
   "crates/tx-builder",
-  "crates/nl-planner",
   "crates/mcp-server",
 ]
 exclude = ["examples/anchor-hello-world/programs/hello_world"]

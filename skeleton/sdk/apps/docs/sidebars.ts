@@ -6,6 +6,7 @@ const sidebars: SidebarsConfig = {
     'quickstart',
     'architecture',
     'non-custodial',
+    'nl-planner',
     {
       type: 'category',
       label: 'API',

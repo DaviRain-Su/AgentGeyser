@@ -26,6 +26,22 @@ export interface InvokeSkillResponse {
   transactionBase64: string;
 }
 
+/** LLM provider selector accepted by `ag_planAction`. */
+export type PlanProvider = 'openai' | 'mock' | 'kimi-coding' | 'anthropic' | 'auto';
+
+/** Request body for `ag_planAction`. */
+export interface PlanActionRequest {
+  prompt: string;
+  provider?: PlanProvider;
+}
+
+/** Structured plan returned by `ag_planAction` (camelCase). */
+export interface Plan {
+  skillId: string;
+  args: Record<string, unknown>;
+  rationale: string;
+}
+
 /** Minimal fetch contract we rely on (browser, Node 20+, cross-fetch). */
 export type FetchLike = (
   input: string | URL,

@@ -20,6 +20,24 @@ user secret.
 ### Added
 - Placeholder for upcoming changes.
 
+## [0.2.0-alpha.0] - 2026-04-24
+
+### Added
+- `nl-planner` crate: natural-language → structured Plan with multiple LLM providers
+- `OpenAiProvider` (OpenAI Chat Completions API)
+- `MockProvider` (deterministic testing path)
+- `AnthropicMessagesProvider` (Anthropic Messages API + tool_use; supports Kimi-for-coding via `api.kimi.com/coding` + `User-Agent: KimiCLI/1.5`)
+- `ag_planAction` JSON-RPC method on the proxy (routes prompts through provider_from_env)
+- `client.planAction` SDK binding (snake_case → camelCase adapter)
+- `tx-builder` `build_spl_token_transfer` (SPL-Token-2022 unsigned transactions)
+- Proxy `ag_invokeSkill` routing for `spl-token::transfer` (devnet RPC blockhash fetch)
+- `signAndSend` SDK helper (non-custodial client-side signing path)
+- MCP server `chain=devnet` parameter (fast-fails mainnet)
+- Docusaurus `nl-planner` documentation page
+
+### Fixed
+- Proxy `spl-token::transfer` response field renamed `tx` → `transaction_base64` to align with SDK adapter contract
+
 ## [0.1.0-alpha.0] - 2026-04-24
 
 Initial public alpha of the AgentGeyser substrate.
@@ -55,4 +73,5 @@ Initial public alpha of the AgentGeyser substrate.
 - No user-facing fixes in this initial release.
 
 [Unreleased]: https://github.com/DaviRain-Su/AgentGeyser/compare/v0.1.0-alpha.0...HEAD
+[0.2.0-alpha.0]: https://github.com/DaviRain-Su/AgentGeyser/releases/tag/v0.2.0-alpha.0
 [0.1.0-alpha.0]: https://github.com/DaviRain-Su/AgentGeyser/releases/tag/v0.1.0-alpha.0

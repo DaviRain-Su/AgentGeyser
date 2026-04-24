@@ -5,18 +5,19 @@
 
 export { AgentGeyserClient } from './client.js';
 export { AgentGeyserError, RpcError, NetworkError, SkillNotFound, ValidationError } from './errors.js';
-export { signAndSend, isNodeEnvironment } from './signAndSend.js';
+export { signAndSend, SignAndSendError } from './signAndSend.js';
 export type {
-  ConfirmationState,
-  SignAndSendBrowserOptions,
-  SignAndSendNodeOptions,
-  SignAndSendOptions,
-  SignAndSendResult,
+  Connection,
+  Signer,
+  UnsignedTxPayload,
 } from './signAndSend.js';
 export type {
   AgentGeyserClientOptions,
   FetchLike,
   InvokeSkillRequest,
   InvokeSkillResponse,
+  Plan,
+  PlanActionRequest,
+  PlanProvider,
   Skill,
 } from './types.js';

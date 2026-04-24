@@ -17,6 +17,8 @@ import type {
   InvokeSkillRequest,
   InvokeSkillResponse,
   JsonRpcResponse,
+  Plan,
+  PlanActionRequest,
   Skill,
 } from './types.js';
 
@@ -76,6 +78,43 @@ export class AgentGeyserClient {
       );
     }
     return result;
+  }
+
+  /**
+   * Ask the proxy's NL planner to translate a natural-language prompt into
+   * a structured {@link Plan} (`ag_planAction`). Server emits snake_case
+   * `skill_id`; this method renames it to `skillId` for the public surface.
+   */
+  async planAction(input: PlanActionRequest): Promise<Plan> {
+    if (!input || typeof input !== 'object') {
+      throw new ValidationError('planAction: input must be an object');
+    }
+    if (typeof input.prompt !== 'string' || input.prompt.length === 0) {
+      throw new ValidationError('planAction: `prompt` is required');
+    }
+    const params: { prompt: string; provider?: string } = { prompt: input.prompt };
+    if (input.provider !== undefined) params.provider = input.provider;
+
+    const raw = await this.rpc<{ skill_id?: unknown; args?: unknown; rationale?: unknown }>(
+      'ag_planAction',
+      params,
+    );
+    if (!raw || typeof raw !== 'object') {
+      throw new ValidationError('ag_planAction: expected object result', raw);
+    }
+    const skillId = raw.skill_id;
+    const args = raw.args;
+    const rationale = raw.rationale;
+    if (typeof skillId !== 'string' || skillId.length === 0) {
+      throw new ValidationError('ag_planAction: missing `skill_id`', raw);
+    }
+    if (!args || typeof args !== 'object') {
+      throw new ValidationError('ag_planAction: missing `args`', raw);
+    }
+    if (typeof rationale !== 'string') {
+      throw new ValidationError('ag_planAction: missing `rationale`', raw);
+    }
+    return { skillId, args: args as Record<string, unknown>, rationale };
   }
 
   private validateInvokeRequest(request: InvokeSkillRequest): void {

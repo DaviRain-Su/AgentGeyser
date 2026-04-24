@@ -111,13 +111,19 @@ impl AgentGeyserMcpServer {
     }
 
     /// Build the `Tool` descriptor for `invoke_skill`. Input schema documents
-    /// the four required fields forwarded to proxy `ag_invokeSkill`
-    /// (F3.1).
+    /// the required fields forwarded to proxy `ag_invokeSkill`, plus the
+    /// explicit `chain` parameter (F13) whose only advertised value is
+    /// `"devnet"`. Mainnet is intentionally not exposed in this release.
     pub fn invoke_skill_tool() -> Tool {
         let schema: JsonObject = json!({
             "type": "object",
-            "required": ["skill_id", "args", "accounts", "payer"],
+            "required": ["chain", "skill_id", "args", "accounts", "payer"],
             "properties": {
+                "chain": {
+                    "type": "string",
+                    "enum": ["devnet"],
+                    "description": "Target Solana chain. Only 'devnet' is supported in this release.",
+                },
                 "skill_id": {"type": "string"},
                 "args": {"type": "object"},
                 "accounts": {"type": "object"},
@@ -145,6 +151,23 @@ impl AgentGeyserMcpServer {
     /// (F3.4) — never a panic.
     pub async fn handle_invoke_skill(&self, args: Option<JsonObject>) -> CallToolResult {
         let args = args.unwrap_or_default();
+        // F13: validate `chain` at the tool boundary BEFORE any RPC call.
+        // Only "devnet" is accepted; anything else (including "mainnet-beta",
+        // "testnet", "") fast-fails with `ChainNotSupported`.
+        match args.get("chain").and_then(|v| v.as_str()) {
+            Some("devnet") => {}
+            Some(other) => {
+                return CallToolResult::error(vec![Content::text(format!(
+                    "invoke_skill: ChainNotSupported: chain `{other}` is not supported; only `devnet` is accepted in this release (mainnet-beta is not exposed)"
+                ))]);
+            }
+            None => {
+                return CallToolResult::error(vec![Content::text(
+                    "invoke_skill: missing or non-string required argument `chain` (must be `devnet`)"
+                        .to_string(),
+                )]);
+            }
+        }
         if !args.get("skill_id").is_some_and(|v| v.is_string()) {
             return CallToolResult::error(vec![Content::text(
                 "invoke_skill: missing or non-string required argument `skill_id`"
@@ -401,6 +424,7 @@ mod tests {
 
         let srv = AgentGeyserMcpServer::new(mock.uri());
         let args = json!({
+            "chain": "devnet",
             "skill_id": "spl-token::transfer",
             "args": {"amount": 1},
             "accounts": {},
@@ -427,6 +451,7 @@ mod tests {
     async fn invoke_skill_missing_skill_id_is_error() {
         let srv = AgentGeyserMcpServer::new("http://127.0.0.1:1"); // unreachable; must not be hit
         let args = json!({
+            "chain": "devnet",
             "args": {"amount": 1},
             "accounts": {},
             "payer": "11111111111111111111111111111111",
@@ -445,5 +470,104 @@ mod tests {
             text.contains("skill_id"),
             "error message must mention skill_id: {text}"
         );
+    }
+
+    // F13 test helpers: keep each test body tight.
+    fn args_with_chain(chain: Option<&str>) -> Option<JsonObject> {
+        let mut obj = json!({
+            "skill_id": "spl-token::transfer",
+            "args": {"amount": 1},
+            "accounts": {},
+            "payer": "11111111111111111111111111111111",
+        });
+        if let Some(c) = chain {
+            obj.as_object_mut().unwrap().insert("chain".into(), json!(c));
+        }
+        obj.as_object().cloned()
+    }
+    fn err_text(r: &CallToolResult) -> String {
+        r.content
+            .first()
+            .and_then(|c| c.as_text())
+            .map(|t| t.text.clone())
+            .expect("text present")
+    }
+
+    /// F13: tool schema advertises `chain` as required with enum ["devnet"].
+    #[test]
+    fn invoke_skill_tool_advertises_chain_devnet_only() {
+        let t = AgentGeyserMcpServer::invoke_skill_tool();
+        let schema = serde_json::Value::Object((*t.input_schema).clone());
+        assert_eq!(schema["properties"]["chain"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["chain"]["enum"], json!(["devnet"]));
+        assert!(schema["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "chain"));
+    }
+
+    /// F13: `chain: "devnet"` routes through the proxy path.
+    #[tokio::test]
+    async fn devnet_routes_to_proxy() -> anyhow::Result<()> {
+        use wiremock::matchers::{body_partial_json, method};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(body_partial_json(json!({"method": "ag_invokeSkill"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                json!({"jsonrpc":"2.0","id":1,"result":{"transaction_base64":"ZGV2bmV0"}}),
+            ))
+            .expect(1)
+            .mount(&mock)
+            .await;
+        let r = AgentGeyserMcpServer::new(mock.uri())
+            .handle_invoke_skill(args_with_chain(Some("devnet")))
+            .await;
+        assert_eq!(r.is_error, Some(false), "unexpected error: {r:?}");
+        Ok(())
+    }
+
+    /// F13: `chain: "mainnet-beta"` fast-fails with `ChainNotSupported`
+    /// BEFORE any RPC call. Mock's `expect(0)` verifies no request was sent.
+    #[tokio::test]
+    async fn mainnet_fast_fails() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&mock)
+            .await;
+        let r = AgentGeyserMcpServer::new(mock.uri())
+            .handle_invoke_skill(args_with_chain(Some("mainnet-beta")))
+            .await;
+        assert_eq!(r.is_error, Some(true));
+        let t = err_text(&r);
+        assert!(
+            t.contains("ChainNotSupported") && t.contains("mainnet-beta"),
+            "{t}"
+        );
+    }
+
+    /// F13: missing `chain` field is rejected as param-required; no RPC.
+    #[tokio::test]
+    async fn missing_chain_rejected() {
+        let r = AgentGeyserMcpServer::new("http://127.0.0.1:1")
+            .handle_invoke_skill(args_with_chain(None))
+            .await;
+        assert_eq!(r.is_error, Some(true));
+        assert!(err_text(&r).contains("chain"));
+    }
+
+    /// F13: empty `chain` string is treated as unsupported chain.
+    #[tokio::test]
+    async fn empty_chain_rejected() {
+        let r = AgentGeyserMcpServer::new("http://127.0.0.1:1")
+            .handle_invoke_skill(args_with_chain(Some("")))
+            .await;
+        assert_eq!(r.is_error, Some(true));
+        assert!(err_text(&r).contains("ChainNotSupported"));
     }
 }
