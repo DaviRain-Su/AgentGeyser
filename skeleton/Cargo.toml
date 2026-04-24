@@ -7,6 +7,7 @@ members = [
   "crates/nl-planner",
   "crates/mcp-server",
 ]
+exclude = ["examples/anchor-hello-world/programs/hello_world"]
 resolver = "2"
 
 [workspace.dependencies]
