@@ -126,6 +126,33 @@ impl IdlRegistry {
         }
     }
 
+    /// Lazy cache-miss path used by the proxy when a skill is absent from the
+    /// in-memory registry. When `rpc_url` is Some and no `<program_id>::*`
+    /// skill currently exists, fetches the on-chain Anchor IDL, synthesizes
+    /// skills, and inserts them. Returns `Ok(true)` if any were added.
+    pub async fn try_fetch_and_register(&self, program_id: &str) -> anyhow::Result<bool> {
+        if self.rpc_url.is_none() {
+            return Ok(false);
+        }
+        let prefix = format!("{}::", program_id);
+        if self.skills.iter().any(|e| e.key().starts_with(&prefix)) {
+            return Ok(false);
+        }
+        let url = self.rpc_url.as_deref().unwrap();
+        let Some(idl) = anchor_idl::fetch_anchor_idl(url, program_id).await? else {
+            return Ok(false);
+        };
+        self.idls.insert(program_id.to_string(), idl.clone());
+        let program = Program { id: program_id.to_string(), name: Some(idl.name.clone()) };
+        self.programs.insert(program_id.to_string(), program.clone());
+        let mut added = 0usize;
+        for skill in skill_synth::synthesize(&program, &idl) {
+            self.skills.insert(skill.skill_id.clone(), skill);
+            added += 1;
+        }
+        Ok(added > 0)
+    }
+
     /// Anchor IDL lookup. Mock table always wins; if none is registered and
     /// `rpc_url` is configured, fall back to an on-chain fetch.
     pub async fn try_fetch_anchor_idl(&self, program_id: &str) -> Option<Idl> {
@@ -249,5 +276,38 @@ mod tests {
         let stream = MockYellowstoneStream::new(vec![YellowstoneEvent::ProgramDeployed { program_id: pid.into() }]);
         registry.attach_stream(stream).await.unwrap();
         assert_eq!(registry.list_skills()[0].instruction_name, "ping");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn lazy_fetch_populates_skills_from_rpc() {
+        use base64::Engine as _;
+        use flate2::{write::ZlibEncoder, Compression};
+        use std::io::Write;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let idl = serde_json::json!({"version":"0.1.0","name":"lazy_hello",
+            "instructions":[{"name":"ping","args":[]}]});
+        let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
+        enc.write_all(&serde_json::to_vec(&idl).unwrap()).unwrap();
+        let zbody = enc.finish().unwrap();
+        let mut acct = vec![0u8; 8];
+        acct.extend_from_slice(&[1u8; 32]);
+        acct.extend_from_slice(&(zbody.len() as u32).to_le_bytes());
+        acct.extend_from_slice(&zbody);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&acct);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut s, _) = listener.accept().await.unwrap();
+            let _ = s.read(&mut [0u8; 4096]).await.unwrap();
+            let body = format!("{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{\"context\":{{\"slot\":1}},\"value\":{{\"data\":[\"{}\",\"base64\"],\"executable\":false,\"lamports\":0,\"owner\":\"11111111111111111111111111111111\",\"rentEpoch\":0}}}}}}", b64);
+            let resp = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body);
+            s.write_all(resp.as_bytes()).await.unwrap();
+        });
+        let registry = IdlRegistry::with_rpc_url(format!("http://127.0.0.1:{}/", port));
+        let pid = "11111111111111111111111111111111";
+        assert!(!registry.has_skill(&format!("{}::ping", pid)));
+        let added = registry.try_fetch_and_register(pid).await.unwrap();
+        assert!(added, "expected lazy fetch to add skills");
+        assert!(registry.has_skill(&format!("{}::ping", pid)));
     }
 }

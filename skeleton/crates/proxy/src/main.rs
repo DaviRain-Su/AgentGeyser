@@ -42,7 +42,10 @@ async fn main() -> anyhow::Result<()> {
     }
 
     tracing::info!(mode = "mock", "agentgeyser proxy starting");
-    let mut registry = IdlRegistry::new();
+    let mut registry = match rpc_url.as_deref() {
+        Some(url) => IdlRegistry::with_rpc_url(url),
+        None => IdlRegistry::new(),
+    };
     register_spl_token_transfer_skill(&mut registry);
     let registry = Arc::new(registry);
     registry.insert_mock_idl(DEMO_PROGRAM_ID, sample_hello_idl());

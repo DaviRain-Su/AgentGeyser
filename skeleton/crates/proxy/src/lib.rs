@@ -126,7 +126,16 @@ async fn handle_invoke(st: &AppState, params: &Value) -> Result<Value, (i32, Str
             .map_err(|e| (-32000, format!("tx build failed: {e}")))?
     } else {
         if !st.registry.has_skill(&skill_id) {
-            return Err((-32004, "skill not found".into()));
+            // Lazy IDL fetch on cache miss: for skill_id `<base58>::<ix_name>`,
+            // attempt a single on-chain Anchor IDL fetch, then retry the lookup.
+            if let Some((pid, _)) = skill_id.split_once("::") {
+                if Pubkey::from_str(pid).is_ok() {
+                    let _ = st.registry.try_fetch_and_register(pid).await;
+                }
+            }
+            if !st.registry.has_skill(&skill_id) {
+                return Err((-32004, "skill not found".into()));
+            }
         }
         let skill = st.registry.skills.get(&skill_id).map(|e| e.value().clone()).unwrap();
         tx_builder::build_anchor_unsigned_tx(&skill, &args, &accounts_map, payer, blockhash)
