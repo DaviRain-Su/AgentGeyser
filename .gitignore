@@ -5,3 +5,5 @@ dist/
 .DS_Store
 .env
 .env.*
+mission-fixtures/
+skeleton/examples/.surfpool-state.json
