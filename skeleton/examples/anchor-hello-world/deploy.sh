@@ -42,8 +42,9 @@ echo "==> verify program keypair pubkey"
 PROGRAM_ID="$(solana-keygen pubkey "$KEYPAIR")"
 echo "program id: $PROGRAM_ID"
 
-echo "==> anchor deploy --provider.cluster $CLUSTER_URL"
-anchor deploy --provider.cluster "$CLUSTER_URL"
+echo "==> solana program deploy --url $CLUSTER_URL"
+[[ -f target/deploy/hello_world.so ]] || cp programs/hello_world/target/deploy/hello_world.so target/deploy/hello_world.so
+solana program deploy "target/deploy/hello_world.so" --program-id "$KEYPAIR" --url "$CLUSTER_URL" --keypair "$HOME/.config/solana/id.json" --use-rpc
 
 echo "==> anchor idl init --provider.cluster $CLUSTER_URL"
 anchor idl init "$PROGRAM_ID" \
