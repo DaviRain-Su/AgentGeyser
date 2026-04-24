@@ -3,4 +3,27 @@ name = "mcp-server"
 version = "0.0.0"
 edition = "2021"
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "agentgeyser-mcp-server"
+path = "src/main.rs"
+
 [dependencies]
+rmcp = { version = "1.5.0", features = ["server", "transport-io", "transport-streamable-http-server"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-std"] }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+axum = { workspace = true }
+tokio-util = { version = "0.7", features = ["rt"] }
+
+[dev-dependencies]
+rmcp = { version = "1.5.0", features = ["server", "client", "transport-io", "transport-streamable-http-server", "transport-streamable-http-client", "transport-streamable-http-client-reqwest", "reqwest"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util"] }
+wiremock = "0.6"

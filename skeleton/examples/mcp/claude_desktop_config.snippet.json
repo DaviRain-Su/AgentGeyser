@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "agentgeyser": {
+      "command": "agentgeyser-mcp-server",
+      "env": {
+        "AGENTGEYSER_PROXY_URL": "http://127.0.0.1:8999"
+      }
+    }
+  }
+}
