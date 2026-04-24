@@ -175,6 +175,7 @@ impl IdlRegistry {
 /// Test helper. Produces a `Stream<YellowstoneEvent>` from a vec.
 pub struct MockYellowstoneStream;
 impl MockYellowstoneStream {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(events: Vec<YellowstoneEvent>) -> impl Stream<Item = YellowstoneEvent> + Unpin {
         Box::pin(stream::iter(events))
     }

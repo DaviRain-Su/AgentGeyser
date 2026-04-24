@@ -1,7 +1,26 @@
 {
   "name": "@agentgeyser/sdk",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Isomorphic TypeScript client for the AgentGeyser proxy (JSON-RPC 2.0).",
+  "license": "MIT",
+  "author": "DaviRain-Su",
+  "keywords": [
+    "solana",
+    "agent",
+    "rpc",
+    "sdk",
+    "web3",
+    "agentgeyser"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DaviRain-Su/AgentGeyser.git",
+    "directory": "skeleton/sdk/packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/DaviRain-Su/AgentGeyser/issues"
+  },
+  "homepage": "https://github.com/DaviRain-Su/AgentGeyser",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -22,8 +41,9 @@
     "agentgeyser": "./bin/agentgeyser"
   },
   "files": [
-    "dist",
     "bin",
+    "dist",
+    "LICENSE",
     "README.md"
   ],
   "scripts": {

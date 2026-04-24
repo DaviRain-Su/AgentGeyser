@@ -1,0 +1,105 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-dry-run:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm workspace
+        run: pnpm install --frozen-lockfile
+        working-directory: skeleton/sdk
+
+      - name: Build pnpm workspace
+        run: pnpm --filter @agentgeyser/sdk build && pnpm --filter @agentgeyser/react build && pnpm --filter @agentgeyser/docs build
+        working-directory: skeleton/sdk
+
+      - name: SDK publish dry-run
+        run: pnpm publish --dry-run --access public --no-git-checks
+        working-directory: skeleton/sdk/packages/sdk
+
+      - name: React publish dry-run
+        run: pnpm publish --dry-run --access public --no-git-checks
+        working-directory: skeleton/sdk/packages/react
+
+      - name: Validate SDK tarball size
+        working-directory: skeleton/sdk/packages/sdk
+        run: |
+          set -euo pipefail
+          echo "::group::SDK pnpm pack --dry-run --json"
+          PACK_JSON=$(npm pack --dry-run --json)
+          echo "$PACK_JSON"
+          echo "::endgroup::"
+          echo "::group::SDK tarball file listing"
+          echo "$PACK_JSON" | jq -r '.[0].files[].path'
+          echo "::endgroup::"
+          UNPACKED=$(echo "$PACK_JSON" | jq -r '.[0].unpackedSize')
+          LIMIT=200000
+          echo "SDK unpackedSize=${UNPACKED} bytes (limit=${LIMIT})"
+          if [ "$UNPACKED" -ge "$LIMIT" ]; then
+            echo "::error::SDK unpackedSize ${UNPACKED} exceeds ${LIMIT} byte limit"
+            exit 1
+          fi
+
+      - name: Validate React tarball size
+        working-directory: skeleton/sdk/packages/react
+        run: |
+          set -euo pipefail
+          echo "::group::React pnpm pack --dry-run --json"
+          PACK_JSON=$(npm pack --dry-run --json)
+          echo "$PACK_JSON"
+          echo "::endgroup::"
+          echo "::group::React tarball file listing"
+          echo "$PACK_JSON" | jq -r '.[0].files[].path'
+          echo "::endgroup::"
+          UNPACKED=$(echo "$PACK_JSON" | jq -r '.[0].unpackedSize')
+          LIMIT=300000
+          echo "React unpackedSize=${UNPACKED} bytes (limit=${LIMIT})"
+          if [ "$UNPACKED" -ge "$LIMIT" ]; then
+            echo "::error::React unpackedSize ${UNPACKED} exceeds ${LIMIT} byte limit"
+            exit 1
+          fi
+
+      - name: Pack SDK tarball
+        run: pnpm pack
+        working-directory: skeleton/sdk/packages/sdk
+
+      - name: Pack React tarball
+        run: pnpm pack
+        working-directory: skeleton/sdk/packages/react
+
+      - name: Upload SDK tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentgeyser-sdk-tarball
+          path: skeleton/sdk/packages/sdk/*.tgz
+          retention-days: 14
+
+      - name: Upload React tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentgeyser-react-tarball
+          path: skeleton/sdk/packages/react/*.tgz
+          retention-days: 14

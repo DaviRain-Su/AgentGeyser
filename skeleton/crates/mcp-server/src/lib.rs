@@ -197,12 +197,14 @@ impl ServerHandler for AgentGeyserMcpServer {
            + '_ {
         let tools = vec![Self::list_skills_tool(), Self::invoke_skill_tool()];
         async move {
-            let mut result = ListToolsResult::default();
-            result.tools = tools;
-            Ok(result)
+            Ok(ListToolsResult {
+                tools,
+                ..ListToolsResult::default()
+            })
         }
     }
 
+    #[allow(clippy::manual_async_fn)]
     fn call_tool(
         &self,
         request: CallToolRequestParams,

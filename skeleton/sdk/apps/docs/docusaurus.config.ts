@@ -7,8 +7,8 @@ const config: Config = {
   favicon: 'img/favicon.ico',
   url: 'https://docs.agentgeyser.dev',
   baseUrl: '/',
-  onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
+  onBrokenLinks: 'throw',
+  onBrokenMarkdownLinks: 'throw',
   trailingSlash: false,
 
   i18n: {

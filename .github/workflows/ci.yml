@@ -1,0 +1,116 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_VERSION: 1.59.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-reg-${{ runner.os }}-${{ hashFiles('skeleton/Cargo.lock') }}
+          restore-keys: |
+            cargo-reg-${{ runner.os }}-
+
+      - name: Cache cargo target
+        uses: actions/cache@v4
+        with:
+          path: skeleton/target
+          key: cargo-target-${{ runner.os }}-${{ hashFiles('skeleton/Cargo.lock') }}
+          restore-keys: |
+            cargo-target-${{ runner.os }}-${{ hashFiles('skeleton/Cargo.lock') }}
+            cargo-target-${{ runner.os }}-
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('skeleton/sdk/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}-${{ hashFiles('skeleton/sdk/pnpm-lock.yaml') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}-
+            playwright-${{ runner.os }}-
+
+      - name: Cargo check workspace (all features)
+        run: cargo check --workspace --all-features
+        working-directory: skeleton
+
+      - name: Cargo clippy workspace (deny warnings)
+        run: cargo clippy --workspace --all-features -- -D warnings
+        working-directory: skeleton
+
+      - name: Cargo test workspace
+        run: cargo test --workspace
+        working-directory: skeleton
+
+      - name: Install pnpm workspace
+        run: pnpm install --frozen-lockfile=false
+        working-directory: skeleton/sdk
+
+      - name: Build pnpm workspace
+        run: pnpm --filter @agentgeyser/sdk build && pnpm --filter @agentgeyser/react build && pnpm --filter @agentgeyser/docs build
+        working-directory: skeleton/sdk
+
+      - name: Test pnpm workspace
+        run: pnpm -r test
+        working-directory: skeleton/sdk
+
+      - name: SDK size-limit
+        run: pnpm --filter @agentgeyser/sdk exec size-limit
+        working-directory: skeleton/sdk
+
+      - name: Install Playwright browsers (chromium, headless-shell)
+        run: pnpm --filter @agentgeyser/react exec playwright install --with-deps chromium
+        working-directory: skeleton/sdk
+
+      - name: React e2e (readiness-guard skip-path)
+        run: pnpm --filter @agentgeyser/react test:e2e
+        working-directory: skeleton/sdk
+        env:
+          SRC_ATA: MOCKED_SRC
+          DST_ATA: MOCKED_DST
+          SRC_OWNER: MOCKED_OWNER
+
+      - name: Docusaurus docs build (onBrokenLinks=throw)
+        run: pnpm --filter @agentgeyser/docs build
+        working-directory: skeleton/sdk
+
+      - name: Typedoc determinism check
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/td1 /tmp/td2
+          pnpm exec typedoc --out /tmp/td1
+          pnpm exec typedoc --out /tmp/td2
+          diff -r /tmp/td1 /tmp/td2
+        working-directory: skeleton/sdk/apps/docs

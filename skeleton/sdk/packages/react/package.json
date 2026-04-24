@@ -1,7 +1,26 @@
 {
   "name": "@agentgeyser/react",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "React hooks for the AgentGeyser SDK (non-custodial; wallet adapter bound).",
+  "license": "MIT",
+  "author": "DaviRain-Su",
+  "keywords": [
+    "solana",
+    "agent",
+    "react",
+    "hooks",
+    "sdk",
+    "agentgeyser"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DaviRain-Su/AgentGeyser.git",
+    "directory": "skeleton/sdk/packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/DaviRain-Su/AgentGeyser/issues"
+  },
+  "homepage": "https://github.com/DaviRain-Su/AgentGeyser",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -15,6 +34,7 @@
   },
   "files": [
     "dist",
+    "LICENSE",
     "README.md"
   ],
   "scripts": {

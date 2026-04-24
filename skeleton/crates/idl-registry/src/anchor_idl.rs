@@ -6,7 +6,7 @@
 //! `decode_anchor_idl_payload` is tested offline.
 //!
 //! True Anchor IDL PDA derivation (SHA-256 off-curve from `[b"anchor:idl"]`
-//! + program id) is deferred to a later milestone — callers supply the
+//! plus program id) is deferred to a later milestone — callers supply the
 //! resolved address as a base58 string.
 
 use std::io::Read;
