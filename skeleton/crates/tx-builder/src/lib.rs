@@ -13,6 +13,8 @@
 //! Output is `bincode::serialize(&Transaction)` bytes ready for an external
 //! wallet to attach the payer signature.
 
+pub mod devnet_gate;
+
 use anyhow::{anyhow, Context, Result};
 use borsh::BorshSerialize;
 use serde_json::Value;
