@@ -2,7 +2,7 @@
  * examples/live-smoke.ts — manual smoke test for AgentGeyser live mode.
  *
  * Default (no flags): polls `ag_listSkills` every 10s via the proxy at
- * AGENTGEYSER_ENDPOINT (default http://127.0.0.1:8899) and prints the DIFF
+ * AGENTGEYSER_ENDPOINT (default http://127.0.0.1:8999) and prints the DIFF
  * vs the previous snapshot (M1 behavior).
  *
  * With `--e2e`: performs the Track B round trip (listSkills → invokeSkill
@@ -14,7 +14,7 @@
 
 import { AgentGeyserClient, type Skill } from '../packages/sdk/src/index.js';
 
-const DEFAULT_ENDPOINT = 'http://127.0.0.1:8899';
+const DEFAULT_ENDPOINT = 'http://127.0.0.1:8999';
 const POLL_INTERVAL_MS = 10_000;
 
 function usage(): void {

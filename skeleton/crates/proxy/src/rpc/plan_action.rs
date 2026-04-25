@@ -48,13 +48,15 @@ async fn dispatch_plan(provider: Option<&str>, prompt: &str) -> Result<Plan, (i3
         "kimi-coding" => {
             let key = std::env::var("KIMI_API_KEY")
                 .map_err(|_| (-32002, "Provider configuration error".into()))?;
-            let p = nl_planner::AnthropicMessagesProvider::kimi_coding_default(key);
+            let p = nl_planner::AnthropicMessagesProvider::try_kimi_coding_default(key)
+                .map_err(plan_error_to_rpc)?;
             plan_with(&p, prompt).await
         }
         "anthropic" => {
             let key = std::env::var("ANTHROPIC_API_KEY")
                 .map_err(|_| (-32002, "Provider configuration error".into()))?;
-            let p = nl_planner::AnthropicMessagesProvider::anthropic_default(key);
+            let p = nl_planner::AnthropicMessagesProvider::try_anthropic_default(key)
+                .map_err(plan_error_to_rpc)?;
             plan_with(&p, prompt).await
         }
         "auto" => {

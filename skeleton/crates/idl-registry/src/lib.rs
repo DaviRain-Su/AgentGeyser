@@ -192,12 +192,12 @@ mod tests {
             instructions: vec![
                 IdlInstruction {
                     name: "greet".into(),
-                    args: vec![IdlInstructionArg { name: "name".into(), kind: "string".into(), ..Default::default() }],
+                    args: vec![IdlInstructionArg { name: "name".into(), kind: "string".into() }],
                     ..Default::default()
                 },
                 IdlInstruction {
                     name: "set_counter".into(),
-                    args: vec![IdlInstructionArg { name: "value".into(), kind: "u64".into(), ..Default::default() }],
+                    args: vec![IdlInstructionArg { name: "value".into(), kind: "u64".into() }],
                     ..Default::default()
                 },
             ],

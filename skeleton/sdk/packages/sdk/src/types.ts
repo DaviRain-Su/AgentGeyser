@@ -3,14 +3,29 @@
  * of the AgentGeyser proxy (`ag_listSkills` / `ag_invokeSkill`). No `any`.
  */
 
-/** A skill descriptor returned by `ag_listSkills`. */
-export interface Skill {
-  id: string;
+/** Argument metadata for a skill returned by `ag_listSkills`. */
+export interface SkillArg {
   name: string;
-  description: string;
-  version?: string;
-  argsSchema?: Readonly<Record<string, unknown>>;
-  accountsSchema?: Readonly<Record<string, unknown>>;
+  ty: unknown;
+}
+
+/** Account metadata for a skill returned by `ag_listSkills`. */
+export interface SkillAccount {
+  name: string;
+  isMut: boolean;
+  isSigner: boolean;
+}
+
+/** A skill descriptor returned by `ag_listSkills` (camelCase SDK surface). */
+export interface Skill {
+  skillId: string;
+  programId: string;
+  programName?: string;
+  instructionName: string;
+  args: SkillArg[];
+  accounts: SkillAccount[];
+  paramsSchema: unknown;
+  discriminator?: number[];
 }
 
 /** Request body for `ag_invokeSkill`. */

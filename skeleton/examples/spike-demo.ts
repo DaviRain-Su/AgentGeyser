@@ -9,7 +9,7 @@
 
 import { AgentGeyserClient } from '../packages/sdk/src/index.js';
 
-const ENDPOINT = process.env.AGENTGEYSER_ENDPOINT ?? 'http://127.0.0.1:8899';
+const ENDPOINT = process.env.AGENTGEYSER_ENDPOINT ?? 'http://127.0.0.1:8999';
 
 async function main(): Promise<void> {
   console.log(`[agentgeyser] connecting to ${ENDPOINT}`);

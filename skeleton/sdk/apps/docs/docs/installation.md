@@ -10,6 +10,12 @@ AgentGeyser ships as two packages: `@agentgeyser/sdk` (isomorphic Node +
 Browser client) and `@agentgeyser/react` (React 18 hooks bound to
 `@solana/wallet-adapter-react`).
 
+:::tip Default ports
+AgentGeyser uses proxy port `8999` and local Solana RPC port `8899` by
+default. Override the proxy port with `AGENTGEYSER_PROXY_PORT`; keep
+`AGENTGEYSER_RPC_URL` pointed at your Solana RPC.
+:::
+
 ## Requirements
 
 - Node.js **≥ 20**

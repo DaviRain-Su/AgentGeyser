@@ -3,13 +3,16 @@
 **Date**: 2026-04-23
 **Scope**: Prove the minimum loop `Yellowstone event → IdlRegistry → SkillSynthesizer → ag_listSkills/ag_invokeSkill → dynamic SDK dispatch → unsigned TX base64`.
 **Status**: ✅ All Spike assertions PASS.
+**Historical note**: This frozen Spike report predates the M5c proxy default
+change to `:8999`; any proxy `:8899` mentions below are historical evidence,
+not current setup guidance.
 
 ## Assertion Results
 
 | ID | Assertion | Status | Evidence |
 |---|---|---|---|
 | A.1 | `cargo build -p proxy -p idl-registry` exits 0 | ✅ | `cargo build --workspace` Finished successfully |
-| A.2 | Proxy listens on `:8899` (auto fallback `:8898`); `ag_listSkills` returns JSON-RPC 2.0 | ✅ | `crates/proxy/src/main.rs:34-42`, integration test `spike_e2e.rs` |
+| A.2 | Historical proxy listens on `:8899` (auto fallback `:8898`); `ag_listSkills` returns JSON-RPC 2.0 | ✅ | `crates/proxy/src/main.rs:34-42`, integration test `spike_e2e.rs` |
 | A.3 | `ag_getIdl` + `ag_invokeSkill` return structured JSON-RPC on unknown IDs | ✅ | `crates/proxy/src/lib.rs:43-72` (-32004 path), test step 6 |
 | A.4 | `IdlRegistry::attach_stream` consumes `Stream<YellowstoneEvent>`; `MockYellowstoneStream` exists | ✅ | `crates/idl-registry/src/lib.rs:60-74` + `MockYellowstoneStream::new` |
 | A.5 | Anchor fast path populates DashMap; non-Anchor skipped without panic | ✅ | `handle_event` match arms; test `missing_idl_is_skipped_without_panic` |
@@ -23,7 +26,7 @@
 | B.6 | Catalog cached after first `ag_listSkills` | ✅ | Test asserts only 1 catalog call across 2 dispatches |
 | B.7 | Vitest suite passes with ≥ 2 tests | ✅ | 3 tests passed |
 | B.8 | `invokeSkill` returns `{ skill_id, transaction_base64 }`, SDK never signs | ✅ | Return type + non-custodial grep (zero matches) |
-| C.1 | `examples/spike-demo.ts` present and runnable | ✅ | File exists; `pnpm demo` script defined |
+| C.1 | `examples/spike-demo.ts` present and runnable | ✅ | File exists; demo script was defined historically |
 | C.2 | Demo lists skills and prints `transaction_base64`; graceful error on unreachable proxy | ✅ | `spike-demo.ts:23-45` |
 | C.3 | `examples/README.md` with 3 commands | ✅ | File checked in |
 | C.4 | `examples/recording.txt` with expected stdout | ✅ | Hand-captured transcript present |

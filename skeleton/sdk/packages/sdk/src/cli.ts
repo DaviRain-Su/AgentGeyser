@@ -7,6 +7,7 @@
 
 import { Command, type Command as CommanderCommand } from 'commander';
 import { AgentGeyserClient } from './client.js';
+import { defaultProxyUrl } from './index.js';
 
 // Minimal ambient declaration — tsconfig sets `types: []` so we don't pull in
 // all of `@types/node`. Only `process` is needed by this CLI entry.
@@ -15,7 +16,7 @@ declare const process: {
   stdout: { write(chunk: string): boolean };
 };
 
-export const DEFAULT_PROXY_URL = 'http://127.0.0.1:8999';
+export const DEFAULT_PROXY_URL = defaultProxyUrl();
 export const DEFAULT_RPC_URL = 'http://127.0.0.1:8899';
 
 export interface ListSkillsOptions { proxyUrl: string; }
@@ -80,7 +81,7 @@ export function buildProgram(handlers: CliHandlers = defaultHandlers): Commander
   program
     .command('list-skills')
     .description('List skills exposed by the proxy (ag_listSkills)')
-    .option('--proxy-url <url>', 'AgentGeyser proxy URL', DEFAULT_PROXY_URL)
+    .option('--proxy-url <url>', 'AgentGeyser proxy URL', defaultProxyUrl())
     .action(async (raw: { proxyUrl: string }) => handlers.listSkills({ proxyUrl: raw.proxyUrl }));
 
   program
@@ -90,7 +91,7 @@ export function buildProgram(handlers: CliHandlers = defaultHandlers): Commander
     .requiredOption('--args <json>', 'Skill args as a JSON object')
     .requiredOption('--accounts <json>', 'Accounts as a JSON object')
     .requiredOption('--payer <pubkey>', 'Fee payer pubkey (base58)')
-    .option('--proxy-url <url>', 'AgentGeyser proxy URL', DEFAULT_PROXY_URL)
+    .option('--proxy-url <url>', 'AgentGeyser proxy URL', defaultProxyUrl())
     .option('--sign', 'Sign with --keypair and submit via --rpc-url', false)
     .option('--keypair <path>', 'Path to a JSON keypair file (required with --sign)')
     .option('--rpc-url <url>', 'Solana RPC endpoint for signed submission', DEFAULT_RPC_URL)

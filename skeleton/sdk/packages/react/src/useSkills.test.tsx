@@ -57,9 +57,23 @@ describe('useSkills', () => {
 
   it('populates data and flips loading:false after resolve', async () => {
     const skills: Skill[] = [
-      { id: 'spl-token::transfer', name: 'Transfer', description: 'Move tokens' },
+      {
+        skillId: 'spl-token::transfer',
+        programId: 'spl-token',
+        instructionName: 'transfer',
+        args: [],
+        accounts: [],
+        paramsSchema: { type: 'object' },
+      },
     ];
-    const fetchImpl = fakeFetch(skills);
+    const fetchImpl = fakeFetch([{
+      skill_id: 'spl-token::transfer',
+      program_id: 'spl-token',
+      instruction_name: 'transfer',
+      args: [],
+      accounts: [],
+      params_schema: { type: 'object' },
+    }]);
     const captured = renderWithFetch(fetchImpl);
     await waitFor(() => expect(captured.current?.loading).toBe(false));
     expect(captured.current?.data).toEqual(skills);

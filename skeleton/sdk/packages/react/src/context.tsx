@@ -10,11 +10,9 @@
  * consumer's `@solana/wallet-adapter-react` wallet + `useInvokeSkill` hook.
  */
 
-import { AgentGeyserClient } from '@agentgeyser/sdk';
+import { AgentGeyserClient, defaultProxyUrl } from '@agentgeyser/sdk';
 import type { FetchLike } from '@agentgeyser/sdk';
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-
-const DEFAULT_PROXY_URL = 'http://127.0.0.1:8999';
 
 const AgentGeyserContext = createContext<AgentGeyserClient | null>(null);
 
@@ -27,7 +25,7 @@ export interface AgentGeyserProviderProps {
 }
 
 export function AgentGeyserProvider(props: AgentGeyserProviderProps): JSX.Element {
-  const { proxyUrl = DEFAULT_PROXY_URL, fetch, children } = props;
+  const { proxyUrl = defaultProxyUrl(), fetch, children } = props;
   const client = useMemo(
     () => new AgentGeyserClient({ proxyUrl, fetch }),
     [proxyUrl, fetch],

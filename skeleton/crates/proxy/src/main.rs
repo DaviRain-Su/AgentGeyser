@@ -2,10 +2,11 @@
 
 use std::sync::Arc;
 
+use anyhow::Context;
 use idl_registry::{
     register_spl_token_transfer_skill, IdlRegistry, MockYellowstoneStream, YellowstoneEvent,
 };
-use proxy::{router, sample_hello_idl, AppState, DEMO_PROGRAM_ID};
+use proxy::{proxy_bind_addr, router, sample_hello_idl, AppState, DEMO_PROGRAM_ID};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -68,14 +69,10 @@ async fn serve(registry: Arc<IdlRegistry>, rpc_url: Option<String>) -> anyhow::R
         rpc_url,
     });
 
-    let bind = std::env::var("AGENTGEYSER_BIND").unwrap_or_else(|_| "127.0.0.1:8899".to_string());
-    let listener = match tokio::net::TcpListener::bind(&bind).await {
-        Ok(l) => l,
-        Err(e) => {
-            tracing::warn!(?e, %bind, "primary bind failed; falling back to 127.0.0.1:8898");
-            tokio::net::TcpListener::bind("127.0.0.1:8898").await?
-        }
-    };
+    let bind = proxy_bind_addr();
+    let listener = tokio::net::TcpListener::bind(&bind)
+        .await
+        .with_context(|| format!("failed to bind {bind}"))?;
     tracing::info!(addr = %listener.local_addr()?, "proxy listening");
     axum::serve(listener, app).await?;
     Ok(())

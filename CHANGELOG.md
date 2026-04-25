@@ -18,7 +18,46 @@ user secret.
 ## [Unreleased]
 
 ### Added
-- Placeholder for upcoming changes.
+- `AGENTGEYSER_PROXY_PORT` as the shared proxy-port default for the Rust proxy,
+  MCP server, TypeScript SDK CLI, and React provider.
+- F15 cross-layer integration test (MCP→proxy→tx-builder→surfpool) with real
+  signed-and-confirmed transaction evidence.
+
+### Changed
+- **Breaking:** `spl-token::transfer` now requires `args.decimals` and emits
+  SPL Token `TransferChecked` instructions that bind the mint account.
+- `spl-token::transfer` now honors the top-level `payer` envelope field in
+  the proxy SPL fast path, while accepting the legacy `accounts` envelope.
+- `@agentgeyser/sdk` `Skill` descriptors returned by `listSkills()` now use
+  camelCase proxy-aligned fields (`skillId`, `programId`, `instructionName`,
+  `paramsSchema`) instead of the old placeholder schema/name fields.
+- AgentGeyser proxy now defaults to `127.0.0.1:8999` (Solana RPC remains
+  `127.0.0.1:8899`) and fails fast on bind errors instead of falling back to
+  `127.0.0.1:8898`.
+- Renamed the tag-triggered npm publishing workflow to `publish-dry-run.yml`
+  and labeled it as a dry-run until real npm publishing ships in M5d.
+- Updated SDK, React, quickstart, installation, and planner docs to use the
+  current proxy URL, `skill_id`/`skillId`, `transactionBase64`, and
+  `signAndSend({ unsignedTx, signer, connection })` APIs.
+- Updated the root `AGENT.md` guide to reflect the actual `skeleton/`
+  workspace layout and current pnpm commands.
+
+### Fixed
+- Added bounded HTTP client timeouts for OpenAI, Anthropic, and MCP proxy
+  forwarding calls so hung upstreams cannot wedge requests indefinitely.
+- OpenAI planning now rejects oversized prompts before making upstream calls and
+  caps completion length with `max_tokens`.
+- MCP proxy forwarding now reports non-2xx proxy responses with HTTP status and
+  a bounded response-body tail instead of surfacing useless JSON parse errors.
+- Converted devnet funding/airdrop probes to async reqwest clients with a
+  bounded timeout so async consumers do not block executor threads.
+- JSON-RPC `ag_invokeSkill` now rejects unknown top-level envelope fields
+  instead of silently dropping them.
+
+### Removed
+- Deleted the dead `skeleton/.github/workflows/ci.yml` workflow; GitHub Actions
+  only honors the root `.github/workflows/` directory.
+- Removed the unused `zod` dependency from `@agentgeyser/sdk`.
 
 ## [0.2.0-alpha.0] - 2026-04-24
 

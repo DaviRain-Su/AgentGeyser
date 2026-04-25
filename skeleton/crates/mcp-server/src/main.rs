@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     match args.transport {
         TransportKind::Stdio => {
-            let server = AgentGeyserMcpServer::from_env();
+            let server = AgentGeyserMcpServer::try_from_env()?;
             tracing::info!(proxy_url = %server.proxy_url, "starting agentgeyser-mcp-server on stdio");
             let service = server.serve(stdio()).await.inspect_err(|e| {
                 tracing::error!(error = ?e, "mcp serve error");

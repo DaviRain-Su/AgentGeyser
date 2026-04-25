@@ -20,6 +20,8 @@ import type {
   Plan,
   PlanActionRequest,
   Skill,
+  SkillAccount,
+  SkillArg,
 } from './types.js';
 
 /** Resolve a fetch: caller-supplied → global fetch → cross-fetch. */
@@ -28,6 +30,54 @@ function resolveFetch(provided?: FetchLike): FetchLike {
   const globalFetch = (globalThis as { fetch?: FetchLike }).fetch;
   if (typeof globalFetch === 'function') return globalFetch;
   return crossFetch as unknown as FetchLike;
+}
+
+type WireSkill = {
+  skill_id?: unknown;
+  program_id?: unknown;
+  program_name?: unknown;
+  instruction_name?: unknown;
+  args?: unknown;
+  accounts?: unknown;
+  params_schema?: unknown;
+  discriminator?: unknown;
+};
+
+function normalizeSkillArg(value: unknown): SkillArg {
+  if (!value || typeof value !== 'object') {
+    return { name: '', ty: value };
+  }
+  const raw = value as Record<string, unknown>;
+  return {
+    name: typeof raw.name === 'string' ? raw.name : '',
+    ty: raw.ty,
+  };
+}
+
+function normalizeSkillAccount(value: unknown): SkillAccount {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    name: typeof raw.name === 'string' ? raw.name : '',
+    isMut: typeof raw.isMut === 'boolean' ? raw.isMut : raw.is_mut === true,
+    isSigner: typeof raw.isSigner === 'boolean' ? raw.isSigner : raw.is_signer === true,
+  };
+}
+
+function normalizeSkillFromWire(value: unknown): Skill {
+  const raw = value && typeof value === 'object' ? value as WireSkill : {};
+  const skill: Skill = {
+    skillId: typeof raw.skill_id === 'string' ? raw.skill_id : '',
+    programId: typeof raw.program_id === 'string' ? raw.program_id : '',
+    instructionName: typeof raw.instruction_name === 'string' ? raw.instruction_name : '',
+    args: Array.isArray(raw.args) ? raw.args.map(normalizeSkillArg) : [],
+    accounts: Array.isArray(raw.accounts) ? raw.accounts.map(normalizeSkillAccount) : [],
+    paramsSchema: raw.params_schema,
+  };
+  if (typeof raw.program_name === 'string') skill.programName = raw.program_name;
+  if (Array.isArray(raw.discriminator)) {
+    skill.discriminator = raw.discriminator.filter((v): v is number => typeof v === 'number');
+  }
+  return skill;
 }
 
 export class AgentGeyserClient {
@@ -45,11 +95,11 @@ export class AgentGeyserClient {
 
   /** Fetch the list of skills the proxy currently exposes (`ag_listSkills`). */
   async listSkills(): Promise<Skill[]> {
-    const result = await this.rpc<Skill[]>('ag_listSkills', []);
+    const result = await this.rpc<unknown>('ag_listSkills', []);
     if (!Array.isArray(result)) {
       throw new ValidationError('ag_listSkills: expected array result', result);
     }
-    return result;
+    return result.map(normalizeSkillFromWire);
   }
 
   /**

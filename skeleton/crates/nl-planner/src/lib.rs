@@ -125,7 +125,7 @@ pub fn provider_from_env() -> Result<ProviderHandle, PlanError> {
     match select_provider_kind(anthropic.is_some(), kimi.is_some(), openai.is_some()) {
         Some(ProviderKind::Anthropic) => {
             let key = anthropic.expect("env var checked above");
-            let provider = AnthropicMessagesProvider::anthropic_default(key);
+            let provider = AnthropicMessagesProvider::try_anthropic_default(key)?;
             let default_model = provider.default_model().to_owned();
             Ok(ProviderHandle {
                 kind: ProviderKind::Anthropic,
@@ -135,7 +135,7 @@ pub fn provider_from_env() -> Result<ProviderHandle, PlanError> {
         }
         Some(ProviderKind::KimiCoding) => {
             let key = kimi.expect("env var checked above");
-            let provider = AnthropicMessagesProvider::kimi_coding_default(key);
+            let provider = AnthropicMessagesProvider::try_kimi_coding_default(key)?;
             let default_model = provider.default_model().to_owned();
             Ok(ProviderHandle {
                 kind: ProviderKind::KimiCoding,
@@ -145,7 +145,7 @@ pub fn provider_from_env() -> Result<ProviderHandle, PlanError> {
         }
         Some(ProviderKind::OpenAi) => {
             let key = openai.expect("env var checked above");
-            let provider = OpenAiProvider::new(key);
+            let provider = OpenAiProvider::try_new(key)?;
             let default_model = provider.default_model().to_owned();
             Ok(ProviderHandle {
                 kind: ProviderKind::OpenAi,

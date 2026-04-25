@@ -43,7 +43,10 @@ pub fn http_router() -> (axum::Router, tokio_util::sync::CancellationToken) {
     let ct = tokio_util::sync::CancellationToken::new();
     let service: StreamableHttpService<AgentGeyserMcpServer, LocalSessionManager> =
         StreamableHttpService::new(
-            || Ok(AgentGeyserMcpServer::from_env()),
+            || {
+                AgentGeyserMcpServer::try_from_env()
+                    .map_err(|e| std::io::Error::other(e.to_string()))
+            },
             Default::default(),
             StreamableHttpServerConfig::default()
                 .with_sse_keep_alive(None)

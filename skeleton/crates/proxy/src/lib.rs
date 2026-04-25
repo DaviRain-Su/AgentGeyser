@@ -17,6 +17,30 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use solana_sdk::{hash::Hash, instruction::AccountMeta, pubkey::Pubkey};
 
+pub const DEFAULT_PROXY_PORT: &str = "8999";
+
+pub fn proxy_port() -> String {
+    std::env::var("AGENTGEYSER_PROXY_PORT")
+        .ok()
+        .filter(|port| !port.is_empty())
+        .unwrap_or_else(|| DEFAULT_PROXY_PORT.into())
+}
+
+pub fn proxy_url() -> String {
+    format!("http://127.0.0.1:{port}", port = proxy_port())
+}
+
+fn proxy_bind_addr_for_port(port: &str) -> String {
+    format!("127.0.0.1:{port}")
+}
+
+pub fn proxy_bind_addr() -> String {
+    std::env::var("AGENTGEYSER_BIND")
+        .ok()
+        .filter(|bind| !bind.is_empty())
+        .unwrap_or_else(|| proxy_bind_addr_for_port(&proxy_port()))
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub registry: Arc<IdlRegistry>,
@@ -37,6 +61,8 @@ pub struct JsonRpcReq {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", post(rpc_handler))
+        .route("/rpc", post(rpc_handler))
+        .route("/healthz", axum::routing::get(|| async { "ok" }))
         .with_state(state)
 }
 
@@ -70,24 +96,24 @@ async fn rpc_handler(State(st): State<AppState>, Json(req): Json<JsonRpcReq>) ->
     }
 }
 
-pub async fn handle_invoke_legacy(st: &AppState, params: &Value) -> Result<Value, (i32, String)> {
-    let skill_id = params
-        .get("skill_id")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
+pub async fn handle_invoke_legacy(
+    st: &AppState,
+    envelope: &rpc::invoke_skill::InvokeSkillEnvelope,
+) -> Result<Value, (i32, String)> {
+    let skill_id = envelope.skill_id.clone();
     if skill_id.is_empty() {
         return Err((-32602, "missing skill_id".into()));
     }
-    let payer_str = params
-        .get("payer")
-        .and_then(Value::as_str)
+    let payer_str = envelope
+        .payer
+        .as_deref()
         .ok_or((-32602, "missing payer".into()))?;
     let payer = Pubkey::from_str(payer_str).map_err(|e| (-32602, format!("invalid payer: {e}")))?;
 
-    let accounts_obj = params.get("accounts").cloned().unwrap_or(json!({}));
-    let accounts_map = parse_named_pubkeys(&accounts_obj)?;
-    let args = params.get("args").cloned().unwrap_or(json!({}));
+    let empty_accounts = json!({});
+    let accounts_obj = envelope.accounts.as_ref().unwrap_or(&empty_accounts);
+    let accounts_map = parse_named_pubkeys(accounts_obj)?;
+    let args = envelope.args.clone();
 
     let blockhash = match &st.rpc_url {
         Some(url) => fetch_latest_blockhash(url)
@@ -242,3 +268,16 @@ pub fn sample_hello_idl() -> Idl {
 }
 
 pub const DEMO_PROGRAM_ID: &str = "HELLO111111111111111111111111111111111111111";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_bind_resolves_to_8999() {
+        assert_eq!(
+            proxy_bind_addr_for_port(DEFAULT_PROXY_PORT),
+            "127.0.0.1:8999"
+        );
+    }
+}

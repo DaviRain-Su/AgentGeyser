@@ -16,17 +16,40 @@ and `@solana/web3.js` `^2.0.0` (the latter is re-exposed by the SDK).
 ## Quickstart
 
 ```tsx
-import { useSkills, useInvokeSkill } from "@agentgeyser/react";
+import {
+  AgentGeyserProvider,
+  useSkills,
+  useInvokeSkill,
+} from "@agentgeyser/react";
 
-export function Panel() {
+function Panel({ payer }: { payer: string }) {
   const { data: skills } = useSkills();
   const invoke = useInvokeSkill();
+  const firstSkill = skills?.[0];
+
   return (
     <button
-      onClick={() => invoke.mutate({ skill: skills?.[0]?.name, args: {} })}
+      disabled={!firstSkill || invoke.loading}
+      onClick={() =>
+        firstSkill &&
+        invoke.mutate({
+          skill_id: firstSkill.skillId,
+          args: {},
+          accounts: {},
+          payer,
+        })
+      }
     >
-      Run first skill
+      {invoke.loading ? "Running…" : "Run first skill"}
     </button>
+  );
+}
+
+export function App() {
+  return (
+    <AgentGeyserProvider proxyUrl="http://127.0.0.1:8999">
+      <Panel payer="<PAYER_PUBKEY>" />
+    </AgentGeyserProvider>
   );
 }
 ```

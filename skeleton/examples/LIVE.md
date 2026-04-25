@@ -30,8 +30,9 @@ Either provider works; AgentGeyser only speaks the standard
 | `AGENTGEYSER_RPC_URL`                 | yes      | Solana JSON-RPC endpoint used to fetch Anchor IDL accounts (devnet ok).  |
 
 All three must be set for the proxy to flip from `mode=mock` to `mode=live`.
-`AGENTGEYSER_BIND` (optional, default `127.0.0.1:8899`) is unchanged from the
-Spike.
+`AGENTGEYSER_PROXY_PORT` (optional, default `8999`) controls the proxy port.
+`AGENTGEYSER_BIND` can still override the full bind address for non-default
+setups.
 
 ## Deploying a test Anchor program on devnet
 

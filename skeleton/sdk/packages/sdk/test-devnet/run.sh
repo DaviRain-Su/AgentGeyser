@@ -12,8 +12,8 @@ SURFPOOL_LOG="${LOG_DIR}/surfpool.log"
 PROXY_LOG="${LOG_DIR}/proxy.log"
 SIG_FILE="/tmp/m5b-devnet-sig.txt"
 
-SURFPOOL_PORT=8899
-PROXY_PORT=8999
+SURFPOOL_PORT="${AGENTGEYSER_SURFPOOL_PORT:-8899}"
+PROXY_PORT="${AGENTGEYSER_PROXY_PORT:-8999}"
 RPC_URL="http://127.0.0.1:${SURFPOOL_PORT}"
 PROXY_URL="http://127.0.0.1:${PROXY_PORT}"
 
@@ -73,7 +73,7 @@ if curl -s -o /dev/null -w '%{http_code}' "${PROXY_URL}" \
 else
   log "starting proxy on ${PROXY_URL} (log: ${PROXY_LOG})"
   pushd "${REPO_ROOT}/skeleton" >/dev/null
-  AGENTGEYSER_RPC_URL="${RPC_URL}" AGENTGEYSER_BIND="127.0.0.1:${PROXY_PORT}" \
+  AGENTGEYSER_RPC_URL="${RPC_URL}" AGENTGEYSER_PROXY_PORT="${PROXY_PORT}" \
     cargo run --quiet -p proxy >"${PROXY_LOG}" 2>&1 &
   PROXY_PID=$!
   popd >/dev/null

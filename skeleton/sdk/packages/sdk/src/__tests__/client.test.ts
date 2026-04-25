@@ -48,8 +48,16 @@ describe('AgentGeyserClient', () => {
 
   describe('listSkills', () => {
     it('returns the parsed skill array on success (happy path)', async () => {
-      const skills: Skill[] = [
-        { id: 'spl-token::transfer', name: 'SPL Transfer', description: 'Move tokens.' },
+      const skills = [
+        {
+          skill_id: 'spl-token::transfer',
+          program_id: 'spl-token',
+          instruction_name: 'transfer',
+          args: [{ name: 'amount', ty: 'u64' }],
+          accounts: [{ name: 'source', is_mut: true, is_signer: false }],
+          params_schema: { type: 'object' },
+          discriminator: [12, 0, 0, 0, 0, 0, 0, 0],
+        },
       ];
       fetchMock.mockResolvedValueOnce(mockResponse({ jsonrpc: '2.0', id: 1, result: skills }));
 
@@ -59,7 +67,17 @@ describe('AgentGeyserClient', () => {
       });
       const out = await client.listSkills();
 
-      expect(out).toEqual(skills);
+      expect(out).toEqual([
+        {
+          skillId: 'spl-token::transfer',
+          programId: 'spl-token',
+          instructionName: 'transfer',
+          args: [{ name: 'amount', ty: 'u64' }],
+          accounts: [{ name: 'source', isMut: true, isSigner: false }],
+          paramsSchema: { type: 'object' },
+          discriminator: [12, 0, 0, 0, 0, 0, 0, 0],
+        },
+      ] satisfies Skill[]);
       expect(fetchMock).toHaveBeenCalledOnce();
       const call = fetchMock.mock.calls[0];
       expect(call[0]).toBe(PROXY_URL);

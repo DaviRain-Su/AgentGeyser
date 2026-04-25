@@ -1,3 +1,6 @@
+Historical recording from the pre-M5c Spike; proxy :8899 lines are preserved
+as frozen evidence, not current setup guidance (current proxy default is :8999).
+
 $ cargo run -p proxy
    Compiling proxy v0.0.0
     Finished `dev` profile
@@ -10,9 +13,7 @@ $ cargo run -p proxy
 2026-04-23T20:50:00.012Z  INFO idl_registry: skill added event=skill_synthesized skill_id=HELLO111111111111111111111111111111111111111::greet
 2026-04-23T20:50:00.012Z  INFO idl_registry: skill added event=skill_synthesized skill_id=HELLO111111111111111111111111111111111111111::set_counter
 
-$ pnpm demo
-> agentgeyser-skeleton@0.0.0 demo
-> tsx examples/spike-demo.ts
+$ # historical spike demo command retired; output below is preserved verbatim
 
 [agentgeyser] connecting to http://127.0.0.1:8899
 [agentgeyser] Discovered 3 skills

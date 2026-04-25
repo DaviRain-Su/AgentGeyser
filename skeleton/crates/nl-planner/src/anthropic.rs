@@ -8,6 +8,7 @@
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::json;
+use std::time::Duration;
 
 use crate::{LlmProvider, Plan, PlanError};
 
@@ -54,7 +55,12 @@ pub struct AnthropicMessagesProvider {
 impl AnthropicMessagesProvider {
     /// Construct a provider pointed at the vanilla Anthropic cloud endpoint.
     pub fn anthropic_default(api_key: String) -> Self {
-        Self::new(
+        Self::try_anthropic_default(api_key)
+            .expect("Anthropic HTTP client with timeout builds")
+    }
+
+    pub fn try_anthropic_default(api_key: String) -> Result<Self, PlanError> {
+        Self::try_new(
             api_key,
             ANTHROPIC_BASE_URL.to_owned(),
             ANTHROPIC_DEFAULT_MODEL.to_owned(),
@@ -65,7 +71,12 @@ impl AnthropicMessagesProvider {
 
     /// Construct a provider pointed at the Kimi-for-coding endpoint.
     pub fn kimi_coding_default(api_key: String) -> Self {
-        Self::new(
+        Self::try_kimi_coding_default(api_key)
+            .expect("Anthropic HTTP client with timeout builds")
+    }
+
+    pub fn try_kimi_coding_default(api_key: String) -> Result<Self, PlanError> {
+        Self::try_new(
             api_key,
             KIMI_CODING_BASE_URL.to_owned(),
             KIMI_CODING_DEFAULT_MODEL.to_owned(),
@@ -83,14 +94,30 @@ impl AnthropicMessagesProvider {
         user_agent: Option<String>,
         flavor: AnthropicFlavor,
     ) -> Self {
-        Self {
+        Self::try_new(api_key, base_url, default_model, user_agent, flavor)
+            .expect("Anthropic HTTP client with timeout builds")
+    }
+
+    pub(crate) fn try_new(
+        api_key: String,
+        base_url: String,
+        default_model: String,
+        user_agent: Option<String>,
+        flavor: AnthropicFlavor,
+    ) -> Result<Self, PlanError> {
+        Ok(Self {
             api_key,
             base_url,
             default_model,
             user_agent,
             flavor,
-            client: reqwest::Client::new(),
-        }
+            client: Self::http_client()?,
+        })
+    }
+
+    fn http_client() -> Result<reqwest::Client, PlanError> {
+        reqwest::Client::builder().timeout(Duration::from_secs(30)).build()
+            .map_err(PlanError::Http)
     }
 
     pub fn provider_name(&self) -> &'static str {
@@ -240,6 +267,11 @@ mod tests {
             "usage": { "input_tokens": 10, "output_tokens": 20 }
         })
         .to_string()
+    }
+
+    #[test]
+    fn anthropic_client_has_timeout() {
+        let _client = AnthropicMessagesProvider::http_client().expect("timeout client builds");
     }
 
     #[tokio::test]

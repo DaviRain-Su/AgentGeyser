@@ -7,19 +7,20 @@ from `skeleton/`.
 # 1. Compile and start the proxy (mock Yellowstone mode is the default).
 cargo run -p proxy
 
-# 2. In another terminal, install Node deps for the SDK + demo.
+# 2. In another terminal, install Node deps for the SDK workspace.
 pnpm install
 
-# 3. Run the demo against the running proxy.
-pnpm demo
+# 3. Build the SDK workspace and run the SDK test suite.
+pnpm -r build
+pnpm --filter @agentgeyser/sdk test
 ```
 
-Expected output is captured verbatim in [`recording.txt`](./recording.txt).
+Historical spike output is captured verbatim in [`recording.txt`](./recording.txt).
 
 ## What the demo does
 
-1. Connects to the proxy at `http://127.0.0.1:8899` (override with
-   `AGENTGEYSER_ENDPOINT`).
+1. Connects to the proxy at `http://127.0.0.1:8999` (override with
+   `AGENTGEYSER_ENDPOINT` or run the proxy with `AGENTGEYSER_PROXY_PORT`).
 2. Calls `ag_listSkills` once via the SDK's lazy catalog loader and prints
    each `<program>::<instruction>` pair.
 3. Invokes `client.hello_world.greet({ name: 'Spike' })`, which dispatches

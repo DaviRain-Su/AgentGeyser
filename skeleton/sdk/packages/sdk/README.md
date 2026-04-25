@@ -1,7 +1,7 @@
 # @agentgeyser/sdk
 
 Isomorphic TypeScript client for the AgentGeyser proxy over JSON-RPC 2.0.
-Browser + Node friendly, non-custodial, and type-safe end-to-end with Zod.
+Browser + Node friendly, non-custodial, with TypeScript types derived from the proxy wire format.
 Pairs with `@solana/web3.js` v2 for transaction signing in your wallet.
 
 ## Install
@@ -15,19 +15,49 @@ Peer dependency: `@solana/web3.js` `^2.0.0` (bring your own).
 ## Quickstart
 
 ```ts
-import { AgentGeyserClient } from "@agentgeyser/sdk";
+import {
+  AgentGeyserClient,
+  signAndSend,
+  type Connection,
+  type Signer,
+} from "@agentgeyser/sdk";
 
 const client = new AgentGeyserClient({
-  endpoint: "http://localhost:9000/rpc",
+  proxyUrl: "http://127.0.0.1:8999",
 });
 
 const skills = await client.listSkills();
-const built = await client.invokeSkill({
-  skill: skills[0].name,
-  args: { amount: 1 },
+const firstSkill = skills[0];
+
+const { transactionBase64 } = await client.invokeSkill({
+  skill_id: firstSkill.skillId,
+  args: {
+    source_ata: "<SOURCE_ATA>",
+    destination_ata: "<DESTINATION_ATA>",
+    owner: "<OWNER_PUBKEY>",
+    amount: 1,
+    mint: "<MINT_PUBKEY>",
+    decimals: 6,
+  },
+  accounts: {},
+  payer: "<PAYER_PUBKEY>",
 });
-// Sign `built.tx` with your wallet, then submit via web3.js.
+
+declare const signer: Signer;
+declare const connection: Connection;
+
+const { signature } = await signAndSend({
+  unsignedTx: { tx: transactionBase64 },
+  signer,
+  connection,
+});
+
+console.log(signature);
 ```
+
+`listSkills()` returns camelCase descriptors such as `skillId`, while
+`invokeSkill()` sends the proxy wire field `skill_id` and normalizes the proxy
+response to `transactionBase64`.
 
 ## Links
 

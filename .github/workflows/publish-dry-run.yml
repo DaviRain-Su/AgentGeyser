@@ -1,4 +1,4 @@
-name: release
+name: Publish dry run
 
 on:
   push:
@@ -10,11 +10,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: publish-dry-run-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release-dry-run:
+  publish-dry-run:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:

@@ -51,7 +51,14 @@ async function main(): Promise<void> {
   const resp = await client.invokeSkill({
     skill_id: 'spl-token::transfer',
     payer: srcOwner,
-    args: { source_ata: srcAta, destination_ata: dstAta, owner: srcOwner, amount, mint },
+    args: {
+      source_ata: srcAta,
+      destination_ata: dstAta,
+      owner: srcOwner,
+      amount,
+      mint,
+      decimals: 6,
+    },
     accounts: {},
   });
   const raw = resp as unknown as Record<string, unknown>;

@@ -21,7 +21,6 @@ fn fixture_idl() -> Idl {
                 args: vec![IdlInstructionArg {
                     name: "name".into(),
                     kind: "string".into(),
-                    ..Default::default()
                 }],
                 ..Default::default()
             },
@@ -30,7 +29,6 @@ fn fixture_idl() -> Idl {
                 args: vec![IdlInstructionArg {
                     name: "value".into(),
                     kind: "u64".into(),
-                    ..Default::default()
                 }],
                 ..Default::default()
             },

@@ -17,20 +17,25 @@ pub mod transport;
 use std::sync::Arc;
 
 use rmcp::{
-    ServerHandler,
     model::{
         CallToolRequestParams, CallToolResult, Content, Implementation, JsonObject,
-        ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities,
-        ServerInfo, Tool,
+        ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities, ServerInfo,
+        Tool,
     },
     service::{RequestContext, RoleServer},
+    ServerHandler,
 };
 use serde_json::json;
 
 use crate::proxy_client::ProxyError;
 
-/// Default agentGeyser proxy URL (matches MVP-M2 user-managed proxy).
-pub const DEFAULT_PROXY_URL: &str = "http://127.0.0.1:8999";
+pub const AGENTGEYSER_PROXY_PORT_ENV: &str = "AGENTGEYSER_PROXY_PORT";
+
+/// Default AgentGeyser proxy URL. Reads `AGENTGEYSER_PROXY_PORT` via
+/// the shared proxy helper, falling back to `http://127.0.0.1:8999`.
+pub fn default_proxy_url() -> String {
+    proxy::proxy_url()
+}
 
 /// Canonical MCP tool name for listing AgentGeyser skills.
 pub const TOOL_LIST_SKILLS: &str = "list_skills";
@@ -59,17 +64,30 @@ pub struct AgentGeyserMcpServer {
 impl AgentGeyserMcpServer {
     /// Construct a new server pointed at the given proxy base URL.
     pub fn new(proxy_url: impl Into<String>) -> Self {
-        Self {
+        Self::try_new(proxy_url).expect("proxy HTTP client with timeout builds")
+    }
+
+    /// Fallible constructor used by production entrypoints to propagate
+    /// unexpected HTTP client build errors.
+    pub fn try_new(proxy_url: impl Into<String>) -> Result<Self, ProxyError> {
+        Ok(Self {
             proxy_url: proxy_url.into(),
-            http: reqwest::Client::new(),
-        }
+            http: proxy_client::http_client()?,
+        })
     }
 
     /// Construct a server using `AGENTGEYSER_PROXY_URL` if set, else the default.
     pub fn from_env() -> Self {
+        Self::try_from_env().expect("proxy HTTP client with timeout builds")
+    }
+
+    /// Fallible environment constructor for entrypoints that can return errors.
+    pub fn try_from_env() -> Result<Self, ProxyError> {
         let url = std::env::var("AGENTGEYSER_PROXY_URL")
-            .unwrap_or_else(|_| DEFAULT_PROXY_URL.to_string());
-        Self::new(url)
+            .ok()
+            .filter(|url| !url.is_empty())
+            .unwrap_or_else(default_proxy_url);
+        Self::try_new(url)
     }
 
     /// Build the `Tool` descriptor for `list_skills`. Empty input schema —
@@ -97,8 +115,7 @@ impl AgentGeyserMcpServer {
     /// `CallToolResult { is_error: Some(true), .. }` instead of panicking
     /// (F2.5).
     pub async fn handle_list_skills(&self) -> CallToolResult {
-        match proxy_client::call(&self.http, &self.proxy_url, "ag_listSkills", json!({})).await
-        {
+        match proxy_client::call(&self.http, &self.proxy_url, "ag_listSkills", json!({})).await {
             Ok(skills) => {
                 // Packs the `result` array into a text content item
                 // containing the JSON-serialized skill list (F2.3).
@@ -125,7 +142,24 @@ impl AgentGeyserMcpServer {
                     "description": "Target Solana chain. Only 'devnet' is supported in this release.",
                 },
                 "skill_id": {"type": "string"},
-                "args": {"type": "object"},
+                "args": {
+                    "type": "object",
+                    "description": "Arguments for spl-token::transfer.",
+                    "properties": {
+                        "source_ata": {"type": "string"},
+                        "destination_ata": {"type": "string"},
+                        "owner": {"type": "string"},
+                        "amount": {"type": "integer", "minimum": 0},
+                        "mint": {"type": "string"},
+                        "decimals": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 255,
+                            "description": "Mint decimals required by SPL Token TransferChecked.",
+                        },
+                    },
+                    "required": ["decimals"],
+                },
                 "accounts": {"type": "object"},
                 "payer": {"type": "string"},
             },
@@ -170,12 +204,19 @@ impl AgentGeyserMcpServer {
         }
         if !args.get("skill_id").is_some_and(|v| v.is_string()) {
             return CallToolResult::error(vec![Content::text(
-                "invoke_skill: missing or non-string required argument `skill_id`"
-                    .to_string(),
+                "invoke_skill: missing or non-string required argument `skill_id`".to_string(),
             )]);
         }
-        let params = serde_json::Value::Object(args);
-        match proxy_client::call(&self.http, &self.proxy_url, "ag_invokeSkill", params).await {
+        let mut params = args;
+        params.remove("chain");
+        match proxy_client::call(
+            &self.http,
+            &self.proxy_url,
+            "ag_invokeSkill",
+            serde_json::Value::Object(params),
+        )
+        .await
+        {
             Ok(result) => {
                 let b64 = result
                     .get("transaction_base64")
@@ -214,10 +255,8 @@ impl ServerHandler for AgentGeyserMcpServer {
         &self,
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<
-        Output = Result<ListToolsResult, rmcp::ErrorData>,
-    > + Send
-           + '_ {
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, rmcp::ErrorData>> + Send + '_
+    {
         let tools = vec![Self::list_skills_tool(), Self::invoke_skill_tool()];
         async move {
             Ok(ListToolsResult {
@@ -232,10 +271,8 @@ impl ServerHandler for AgentGeyserMcpServer {
         &self,
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<
-        Output = Result<CallToolResult, rmcp::ErrorData>,
-    > + Send
-           + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResult, rmcp::ErrorData>> + Send + '_
+    {
         async move {
             match request.name.as_ref() {
                 TOOL_LIST_SKILLS => Ok(self.handle_list_skills().await),
@@ -274,14 +311,14 @@ mod tests {
         let (server_io, client_io) = tokio::io::duplex(4096);
 
         let server_handle = tokio::spawn(async move {
-            let server = AgentGeyserMcpServer::new(DEFAULT_PROXY_URL)
+            let server = AgentGeyserMcpServer::new(default_proxy_url())
                 .serve(server_io)
                 .await?;
             server.waiting().await?;
             anyhow::Ok(())
         });
 
-        let client = EmptyClient::default().serve(client_io).await?;
+        let client = EmptyClient.serve(client_io).await?;
         let info = client
             .peer_info()
             .cloned()
@@ -311,15 +348,21 @@ mod tests {
     fn list_skills_tool_shape() {
         let t = AgentGeyserMcpServer::list_skills_tool();
         assert_eq!(t.name, TOOL_LIST_SKILLS);
-        assert_eq!(
-            t.description.as_deref(),
-            Some(TOOL_LIST_SKILLS_DESCRIPTION)
-        );
+        assert_eq!(t.description.as_deref(), Some(TOOL_LIST_SKILLS_DESCRIPTION));
         let schema = serde_json::Value::Object((*t.input_schema).clone());
         assert_eq!(
             schema,
             json!({"type": "object", "properties": {}}),
             "inputSchema must be empty object schema"
+        );
+    }
+
+    #[test]
+    fn proxy_client_has_timeout() {
+        let _client = proxy_client::http_client().expect("timeout client builds");
+        assert_eq!(
+            proxy_client::PROXY_HTTP_TIMEOUT,
+            std::time::Duration::from_secs(10)
         );
     }
 
@@ -481,7 +524,9 @@ mod tests {
             "payer": "11111111111111111111111111111111",
         });
         if let Some(c) = chain {
-            obj.as_object_mut().unwrap().insert("chain".into(), json!(c));
+            obj.as_object_mut()
+                .unwrap()
+                .insert("chain".into(), json!(c));
         }
         obj.as_object().cloned()
     }
@@ -505,6 +550,22 @@ mod tests {
             .unwrap()
             .iter()
             .any(|v| v == "chain"));
+    }
+
+    #[test]
+    fn mcp_invoke_schema_includes_decimals() {
+        let t = AgentGeyserMcpServer::invoke_skill_tool();
+        let schema = serde_json::Value::Object((*t.input_schema).clone());
+        assert_eq!(
+            schema["properties"]["args"]["properties"]["decimals"]["type"],
+            json!("integer"),
+            "spl-token::transfer args schema must expose decimals"
+        );
+        assert!(schema["properties"]["args"]["required"]
+            .as_array()
+            .expect("args.required array")
+            .iter()
+            .any(|v| v == "decimals"));
     }
 
     /// F13: `chain: "devnet"` routes through the proxy path.

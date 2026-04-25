@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::json;
+use std::time::Duration;
 
 use crate::{LlmProvider, Plan, PlanError};
 
@@ -8,6 +9,7 @@ const OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 const DEFAULT_MODEL: &str = "gpt-4o-mini";
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 const TOKEN_BUDGET: u64 = 500;
+const OPENAI_SYSTEM_PROMPT: &str = "Return only JSON with skill_id, args, and rationale fields.";
 
 /// OpenAI Chat Completions provider. Kept minimal (OpenAI proper) after F17
 /// moved Kimi-for-coding onto its own Anthropic Messages provider.
@@ -21,12 +23,23 @@ pub struct OpenAiProvider {
 impl OpenAiProvider {
     /// Construct from `OPENAI_API_KEY` with OpenAI's default endpoint.
     pub fn new(api_key: String) -> Self {
-        Self {
+        Self::try_new(api_key).expect("OpenAI HTTP client with timeout builds")
+    }
+
+    pub(crate) fn try_new(api_key: String) -> Result<Self, PlanError> {
+        Ok(Self {
             api_key,
             model: DEFAULT_MODEL.to_owned(),
             base_url: OPENAI_BASE_URL.to_owned(),
-            client: reqwest::Client::new(),
-        }
+            client: Self::http_client()?,
+        })
+    }
+
+    fn http_client() -> Result<reqwest::Client, PlanError> {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .map_err(PlanError::Http)
     }
 
     /// Read `OPENAI_API_KEY` from the environment and construct a default
@@ -35,7 +48,7 @@ impl OpenAiProvider {
     pub fn from_env() -> Result<Self, PlanError> {
         let api_key = std::env::var(OPENAI_API_KEY_ENV)
             .map_err(|_| PlanError::Upstream(format!("{OPENAI_API_KEY_ENV} env var is not set")))?;
-        Ok(Self::new(api_key))
+        Self::try_new(api_key)
     }
 
     pub fn provider_name(&self) -> &'static str {
@@ -51,6 +64,15 @@ impl OpenAiProvider {
     }
 
     async fn plan_at(&self, prompt: &str, url: &str) -> Result<Plan, PlanError> {
+        let estimated_prompt_tokens =
+            ((OPENAI_SYSTEM_PROMPT.chars().count() + prompt.chars().count()) / 4) as u64;
+        if estimated_prompt_tokens > TOKEN_BUDGET / 2 {
+            return Err(PlanError::BudgetExceeded(format!(
+                "pre-flight prompt estimate {estimated_prompt_tokens} exceeds half budget {}",
+                TOKEN_BUDGET / 2
+            )));
+        }
+
         let response = self
             .client
             .post(url)
@@ -60,11 +82,12 @@ impl OpenAiProvider {
                 "messages": [
                     {
                         "role": "system",
-                        "content": "Return only JSON with skill_id, args, and rationale fields."
+                        "content": OPENAI_SYSTEM_PROMPT
                     },
                     { "role": "user", "content": prompt }
                 ],
-                "response_format": { "type": "json_object" }
+                "response_format": { "type": "json_object" },
+                "max_tokens": TOKEN_BUDGET
             }))
             .send()
             .await
@@ -138,8 +161,13 @@ mod tests {
             api_key: "test-key".to_owned(),
             model: "gpt-test".to_owned(),
             base_url: "https://api.openai.com/v1".to_owned(),
-            client: reqwest::Client::new(),
+            client: OpenAiProvider::http_client().expect("timeout client builds"),
         }
+    }
+
+    #[test]
+    fn openai_client_has_timeout() {
+        let _client = OpenAiProvider::http_client().expect("timeout client builds");
     }
 
     fn completion_body(total_tokens: u64) -> String {
@@ -202,7 +230,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn budget_guardrail() {
+    async fn post_hoc_budget_guardrail_still_enforced() {
         let mut srv = mockito::Server::new_async().await;
         srv.mock("POST", "/v1/chat/completions")
             .with_status(200)
@@ -218,5 +246,49 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(err, PlanError::BudgetExceeded(_)));
+    }
+
+    #[tokio::test]
+    async fn openai_pre_flight_budget_rejects_long_prompt() {
+        let mut srv = mockito::Server::new_async().await;
+        let mock = srv
+            .mock("POST", "/v1/chat/completions")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(completion_body(42))
+            .expect(0)
+            .create_async()
+            .await;
+
+        let url = format!("{}/v1/chat/completions", srv.url());
+        let prompt = "x".repeat(((TOKEN_BUDGET / 2) as usize + 1) * 4);
+        let err = provider().plan_at(&prompt, &url).await.unwrap_err();
+
+        match err {
+            PlanError::BudgetExceeded(message) => assert!(message.contains("pre-flight")),
+            other => panic!("expected BudgetExceeded, got {other:?}"),
+        }
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn openai_request_body_includes_max_tokens_in_request_body() {
+        let mut srv = mockito::Server::new_async().await;
+        let mock = srv
+            .mock("POST", "/v1/chat/completions")
+            .match_body(Matcher::PartialJson(json!({ "max_tokens": TOKEN_BUDGET })))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(completion_body(42))
+            .create_async()
+            .await;
+
+        let url = format!("{}/v1/chat/completions", srv.url());
+        provider()
+            .plan_at("transfer one token", &url)
+            .await
+            .unwrap();
+
+        mock.assert_async().await;
     }
 }

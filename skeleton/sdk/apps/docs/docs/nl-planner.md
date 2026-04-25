@@ -38,10 +38,14 @@ passing offline.
 
 ## SDK usage
 
+Construct the SDK client with the proxy endpoint via `proxyUrl`; the client
+posts JSON-RPC directly to the proxy and normalizes planner results to the
+camelCase `Plan` shape.
+
 ```ts
 import { AgentGeyserClient } from '@agentgeyser/sdk';
 
-const client = new AgentGeyserClient({ url: 'http://localhost:8787' });
+const client = new AgentGeyserClient({ proxyUrl: 'http://127.0.0.1:8999' });
 
 const { skillId, args, rationale } = await client.planAction({
   prompt: 'transfer 0.01 USDC to alice',
@@ -52,6 +56,14 @@ console.log(skillId, args, rationale);
 
 The client speaks the `ag_planAction` JSON-RPC method and returns the
 camelCase `Plan` shape. No secrets are read or sent by the SDK.
+
+:::tip Proxy port
+- AgentGeyser proxy: `http://127.0.0.1:8999`
+- Local Solana RPC (surfpool): `http://127.0.0.1:8899`
+
+Override the proxy port with `AGENTGEYSER_PROXY_PORT` when you need a
+non-default setup.
+:::
 
 ## Providers (OpenAI vs Mock)
 

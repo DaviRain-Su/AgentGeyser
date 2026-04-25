@@ -12,8 +12,9 @@ serde_json = { workspace = true }
 bincode = "1"
 base64 = { workspace = true }
 skill-synth = { path = "../skill-synth" }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
 sha2 = "0.10"
 mockito = "1"
+tokio = { workspace = true }

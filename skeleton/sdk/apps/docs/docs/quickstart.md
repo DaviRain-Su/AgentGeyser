@@ -11,12 +11,21 @@ keypair, and signing from the browser via a wallet adapter. Both talk to
 the same AgentGeyser proxy and never reveal private-key material to the
 SDK surface outside of the Node-only `signAndSend` helper.
 
+:::tip Default ports
+- AgentGeyser proxy: `http://127.0.0.1:8999`
+- Local Solana RPC (surfpool): `http://127.0.0.1:8899`
+
+Set `AGENTGEYSER_PROXY_PORT` to run the proxy on a different port.
+:::
+
 ## Node
 
 ```ts
 import {
   AgentGeyserClient,
   signAndSend,
+  type Connection,
+  type Signer,
 } from '@agentgeyser/sdk';
 
 const client = new AgentGeyserClient({
@@ -24,32 +33,33 @@ const client = new AgentGeyserClient({
 });
 
 const skills = await client.listSkills();
-console.log(skills.map((s) => s.id));
+console.log(skills.map((s) => s.skillId));
 
 const { transactionBase64 } = await client.invokeSkill({
   skill_id: 'spl-token::transfer',
-  args: { amount: 1 },
-  accounts: {
-    source: '<SOURCE_ATA>',
-    destination: '<DEST_ATA>',
-    authority: '<AUTHORITY>',
+  args: {
+    source_ata: '<SOURCE_ATA>',
+    destination_ata: '<DESTINATION_ATA>',
+    owner: '<OWNER_PUBKEY>',
+    amount: 1,
+    mint: '<MINT_PUBKEY>',
+    decimals: 6,
   },
+  accounts: {},
   payer: '<PAYER_PUBKEY>',
 });
 
-const { signature } = await signAndSend({
-  client,
-  transactionBase64,
-  rpcUrl: 'http://127.0.0.1:8899',
-  keypairPath: './payer.json',
-});
+declare const signer: Signer;
+declare const connection: Connection;
+
+const { signature } = await signAndSend({ unsignedTx: { tx: transactionBase64 }, signer, connection });
 
 console.log('SIG=' + signature);
 ```
 
-`signAndSend` is the **only** surface in the SDK that reads a keypair from
-disk, and it only does so when you hand it a `keypairPath`. The import of
-`node:fs` is dynamic and never evaluated in a browser bundle.
+`signAndSend` accepts an unsigned transaction payload plus caller-provided
+`signer` and `connection` adapters. The SDK never reads keypair files or takes
+custody of private-key material.
 
 ## Browser
 
@@ -69,12 +79,15 @@ function InvokeButton() {
       onClick={() =>
         mutate({
           skill_id: 'spl-token::transfer',
-          args: { amount: 1 },
-          accounts: {
-            source: '<SOURCE_ATA>',
-            destination: '<DEST_ATA>',
-            authority: '<AUTHORITY>',
+          args: {
+            source_ata: '<SOURCE_ATA>',
+            destination_ata: '<DESTINATION_ATA>',
+            owner: '<OWNER_PUBKEY>',
+            amount: 1,
+            mint: '<MINT_PUBKEY>',
+            decimals: 6,
           },
+          accounts: {},
           payer: '<PAYER_PUBKEY>',
         })
       }

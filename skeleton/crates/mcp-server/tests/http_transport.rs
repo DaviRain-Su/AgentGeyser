@@ -2,15 +2,31 @@
 //! drive `initialize` + `tools/list` via rmcp's client; assert both tools
 //! are advertised. Tool-call forwarding is covered by F2/F3 unit tests.
 
-use mcp_server::transport::http_router;
+use mcp_server::{transport::http_router, AgentGeyserMcpServer};
 use rmcp::{
-    ServiceExt,
     model::ClientInfo,
     transport::{
-        StreamableHttpClientTransport,
-        streamable_http_client::StreamableHttpClientTransportConfig,
+        streamable_http_client::StreamableHttpClientTransportConfig, StreamableHttpClientTransport,
     },
+    ServiceExt,
 };
+use serde_json::json;
+
+#[test]
+fn mcp_invoke_schema_includes_decimals() {
+    let t = AgentGeyserMcpServer::invoke_skill_tool();
+    let schema = serde_json::Value::Object((*t.input_schema).clone());
+    assert_eq!(
+        schema["properties"]["args"]["properties"]["decimals"]["type"],
+        json!("integer"),
+        "spl-token::transfer args schema must expose decimals"
+    );
+    assert!(schema["properties"]["args"]["required"]
+        .as_array()
+        .expect("args.required array")
+        .iter()
+        .any(|v| v == "decimals"));
+}
 
 #[tokio::test]
 async fn mcp_http_transport_roundtrip() -> anyhow::Result<()> {
