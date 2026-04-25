@@ -40,11 +40,26 @@ pub fn register_spl_token_transfer_skill(registry: &mut IdlRegistry) {
         }),
         discriminator: [3, 0, 0, 0, 0, 0, 0, 0],
         accounts: vec![
-            SkillAccountSpec { name: "source".into(), is_mut: true, is_signer: false },
-            SkillAccountSpec { name: "destination".into(), is_mut: true, is_signer: false },
-            SkillAccountSpec { name: "authority".into(), is_mut: false, is_signer: true },
+            SkillAccountSpec {
+                name: "source".into(),
+                is_mut: true,
+                is_signer: false,
+            },
+            SkillAccountSpec {
+                name: "destination".into(),
+                is_mut: true,
+                is_signer: false,
+            },
+            SkillAccountSpec {
+                name: "authority".into(),
+                is_mut: false,
+                is_signer: true,
+            },
         ],
-        args: vec![SkillArgSpec { name: "amount".into(), ty: IdlType::U64 }],
+        args: vec![SkillArgSpec {
+            name: "amount".into(),
+            ty: IdlType::U64,
+        }],
     };
     registry.skills.insert(skill.skill_id.clone(), skill);
 }
@@ -59,7 +74,9 @@ mod tests {
         register_spl_token_transfer_skill(&mut registry);
         let skills = registry.list_skills();
         assert!(
-            skills.iter().any(|s| s.skill_id == SPL_TOKEN_TRANSFER_SKILL_ID),
+            skills
+                .iter()
+                .any(|s| s.skill_id == SPL_TOKEN_TRANSFER_SKILL_ID),
             "list_skills must contain spl-token::transfer, got {:?}",
             skills.iter().map(|s| &s.skill_id).collect::<Vec<_>>()
         );

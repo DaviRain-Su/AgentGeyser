@@ -4,7 +4,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use rmcp::transport::streamable_http_server::{
-    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
+    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
 };
 
 use crate::AgentGeyserMcpServer;

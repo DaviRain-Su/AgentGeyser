@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use futures::stream;
+use tokio::sync::Semaphore;
 use tokio_stream::{Stream, StreamExt};
 
 pub use skill_synth::{Idl, IdlInstruction, IdlInstructionArg, Program, Skill};
@@ -21,6 +22,9 @@ pub mod native_skills;
 
 pub use native_skills::register_spl_token_transfer_skill;
 
+const DEFAULT_IDL_FETCH_CONCURRENCY: usize = 8;
+const IDL_FETCH_CONCURRENCY_ENV: &str = "AGENTGEYSER_IDL_FETCH_CONCURRENCY";
+
 /// Events that can be consumed by `IdlRegistry::attach_stream`.
 #[derive(Clone, Debug)]
 pub enum YellowstoneEvent {
@@ -28,7 +32,7 @@ pub enum YellowstoneEvent {
 }
 
 /// Thread-safe, cloneable handle to the shared in-memory registry tables.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct IdlRegistry {
     pub programs: Arc<DashMap<String, Program>>,
     pub idls: Arc<DashMap<String, Idl>>,
@@ -38,6 +42,29 @@ pub struct IdlRegistry {
     pub mock_idls: Arc<DashMap<String, Idl>>,
     /// Optional Solana JSON-RPC endpoint used when no mock IDL is found.
     pub rpc_url: Option<String>,
+    /// Limits concurrent Anchor IDL fetch + skill synthesis tasks.
+    pub idl_fetch_semaphore: Arc<Semaphore>,
+}
+
+impl Default for IdlRegistry {
+    fn default() -> Self {
+        Self {
+            programs: Arc::new(DashMap::new()),
+            idls: Arc::new(DashMap::new()),
+            skills: Arc::new(DashMap::new()),
+            mock_idls: Arc::new(DashMap::new()),
+            rpc_url: None,
+            idl_fetch_semaphore: Arc::new(Semaphore::new(DEFAULT_IDL_FETCH_CONCURRENCY)),
+        }
+    }
+}
+
+fn idl_fetch_concurrency_from_env() -> usize {
+    std::env::var(IDL_FETCH_CONCURRENCY_ENV)
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .filter(|permits| *permits > 0)
+        .unwrap_or(DEFAULT_IDL_FETCH_CONCURRENCY)
 }
 
 impl IdlRegistry {
@@ -50,6 +77,7 @@ impl IdlRegistry {
     pub fn with_rpc_url(url: impl Into<String>) -> Self {
         Self {
             rpc_url: Some(url.into()),
+            idl_fetch_semaphore: Arc::new(Semaphore::new(idl_fetch_concurrency_from_env())),
             ..Self::default()
         }
     }
@@ -82,9 +110,17 @@ impl IdlRegistry {
         S: Stream<Item = YellowstoneEvent> + Send + Unpin + 'static,
     {
         let this = Arc::clone(self);
+        let semaphore = Arc::clone(&self.idl_fetch_semaphore);
         tokio::spawn(async move {
             while let Some(ev) = stream.next().await {
-                this.handle_event(ev).await;
+                let this = Arc::clone(&this);
+                let semaphore = Arc::clone(&semaphore);
+                tokio::spawn(async move {
+                    let Ok(_permit) = semaphore.acquire_owned().await else {
+                        return;
+                    };
+                    this.handle_event(ev).await;
+                });
             }
         })
     }
@@ -97,6 +133,13 @@ impl IdlRegistry {
                 match self.try_fetch_anchor_idl(&program_id).await {
                     Some(idl) => {
                         tracing::info!(event = "idl_fetched", %program_id, "anchor idl fetched");
+                        if self
+                            .skills
+                            .iter()
+                            .any(|skill| skill.value().program_id == program_id)
+                        {
+                            tracing::info!(%program_id, "already registered; refreshing");
+                        }
                         self.idls.insert(program_id.clone(), idl.clone());
                         let program = Program {
                             id: program_id.clone(),
@@ -119,7 +162,7 @@ impl IdlRegistry {
                         }
                     }
                     None => {
-                        tracing::debug!(%program_id, "no anchor idl; skipping");
+                        tracing::warn!(%program_id, "non-anchor program; skipping");
                     }
                 }
             }
@@ -143,8 +186,12 @@ impl IdlRegistry {
             return Ok(false);
         };
         self.idls.insert(program_id.to_string(), idl.clone());
-        let program = Program { id: program_id.to_string(), name: Some(idl.name.clone()) };
-        self.programs.insert(program_id.to_string(), program.clone());
+        let program = Program {
+            id: program_id.to_string(),
+            name: Some(idl.name.clone()),
+        };
+        self.programs
+            .insert(program_id.to_string(), program.clone());
         let mut added = 0usize;
         for skill in skill_synth::synthesize(&program, &idl) {
             self.skills.insert(skill.skill_id.clone(), skill);
@@ -192,17 +239,219 @@ mod tests {
             instructions: vec![
                 IdlInstruction {
                     name: "greet".into(),
-                    args: vec![IdlInstructionArg { name: "name".into(), kind: "string".into() }],
+                    args: vec![IdlInstructionArg {
+                        name: "name".into(),
+                        kind: "string".into(),
+                    }],
                     ..Default::default()
                 },
                 IdlInstruction {
                     name: "set_counter".into(),
-                    args: vec![IdlInstructionArg { name: "value".into(), kind: "u64".into() }],
+                    args: vec![IdlInstructionArg {
+                        name: "value".into(),
+                        kind: "u64".into(),
+                    }],
                     ..Default::default()
                 },
             ],
             ..Default::default()
         }
+    }
+
+    fn single_ix_idl(name: impl Into<String>, ix_name: impl Into<String>) -> Idl {
+        Idl {
+            version: "0.1.0".into(),
+            name: name.into(),
+            instructions: vec![IdlInstruction {
+                name: ix_name.into(),
+                args: vec![],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    async fn wait_for_skill_count(registry: &IdlRegistry, expected: usize) -> Vec<Skill> {
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                let skills = registry.list_skills();
+                if skills.len() >= expected {
+                    return skills;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("skills should register within one second")
+    }
+
+    #[tokio::test]
+    async fn auto_register_skill_on_program_deployed() {
+        let registry = Arc::new(IdlRegistry::new());
+        let program_ids = [
+            "AUTO111111111111111111111111111111111111111",
+            "AUTO222222222222222222222222222222222222222",
+            "AUTO333333333333333333333333333333333333333",
+        ];
+        for (idx, pid) in program_ids.iter().enumerate() {
+            registry.insert_mock_idl(pid, single_ix_idl(format!("auto_{idx}"), "ping"));
+        }
+        let events = program_ids
+            .iter()
+            .map(|pid| YellowstoneEvent::ProgramDeployed {
+                program_id: (*pid).into(),
+            })
+            .collect();
+
+        let started = std::time::Instant::now();
+        let handle = registry.attach_stream(MockYellowstoneStream::new(events));
+        handle.await.unwrap();
+        let skills = wait_for_skill_count(&registry, 3).await;
+        let latency_ms = started.elapsed().as_millis() as u64;
+
+        assert_eq!(skills.len(), 3);
+        for pid in program_ids {
+            assert!(skills.iter().any(|skill| skill.program_id == pid));
+        }
+
+        std::fs::create_dir_all("/tmp/m6-evidence").unwrap();
+        std::fs::write(
+            "/tmp/m6-evidence/f3-auto-register.json",
+            format!(
+                "{}\n",
+                serde_json::json!({
+                    "program_id": program_ids[0],
+                    "skills_registered": skills.len(),
+                    "latency_ms": latency_ms
+                })
+            ),
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn non_anchor_program_skipped_with_warn() {
+        let registry = IdlRegistry::new();
+
+        registry
+            .handle_event(YellowstoneEvent::ProgramDeployed {
+                program_id: "UNKNOWN".into(),
+            })
+            .await;
+
+        assert!(registry.list_skills().is_empty());
+    }
+
+    fn build_rpc_idl_payload(name: &str) -> Vec<u8> {
+        use flate2::{write::ZlibEncoder, Compression};
+        use std::io::Write;
+
+        let idl_json = serde_json::json!({
+            "version": "0.1.0",
+            "name": name,
+            "instructions": [{"name":"ping","args":[]}]
+        });
+        let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
+        enc.write_all(&serde_json::to_vec(&idl_json).unwrap())
+            .unwrap();
+        let zbody = enc.finish().unwrap();
+        let mut acct = vec![0u8; 8];
+        acct.extend_from_slice(&[1u8; 32]);
+        acct.extend_from_slice(&(zbody.len() as u32).to_le_bytes());
+        acct.extend_from_slice(&zbody);
+        acct
+    }
+
+    async fn serve_delayed_accounts(
+        account: Vec<u8>,
+        max_requests: usize,
+        current: Arc<std::sync::atomic::AtomicUsize>,
+        max_seen: Arc<std::sync::atomic::AtomicUsize>,
+    ) -> String {
+        use base64::Engine as _;
+        use std::sync::atomic::Ordering;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let encoded = base64::engine::general_purpose::STANDARD.encode(account);
+        let body = Arc::new(format!(
+            r#"{{"jsonrpc":"2.0","id":1,"result":{{"context":{{"slot":1}},"value":{{"data":["{encoded}","base64"],"executable":false,"lamports":0,"owner":"11111111111111111111111111111111","rentEpoch":0}}}}}}"#
+        ));
+        tokio::spawn(async move {
+            for _ in 0..max_requests {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let body = Arc::clone(&body);
+                let current = Arc::clone(&current);
+                let max_seen = Arc::clone(&max_seen);
+                tokio::spawn(async move {
+                    let in_flight = current.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_seen.fetch_max(in_flight, Ordering::SeqCst);
+
+                    let mut buf = vec![0u8; 4096];
+                    let _ = socket.read(&mut buf).await.unwrap();
+                    tokio::time::sleep(std::time::Duration::from_millis(75)).await;
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    socket.write_all(resp.as_bytes()).await.unwrap();
+                    current.fetch_sub(1, Ordering::SeqCst);
+                });
+            }
+        });
+        format!("http://127.0.0.1:{port}/")
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrency_cap_is_enforced() {
+        use solana_sdk::pubkey::Pubkey;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+        let program_ids: Vec<_> = (0..5).map(|_| Pubkey::new_unique()).collect();
+        let current = Arc::new(AtomicUsize::new(0));
+        let max_seen = Arc::new(AtomicUsize::new(0));
+        let url = serve_delayed_accounts(
+            build_rpc_idl_payload("concurrent"),
+            program_ids.len(),
+            Arc::clone(&current),
+            Arc::clone(&max_seen),
+        )
+        .await;
+
+        let registry = {
+            let _guard = ENV_LOCK.lock().await;
+            unsafe {
+                std::env::set_var("AGENTGEYSER_IDL_FETCH_CONCURRENCY", "2");
+            }
+            let registry = Arc::new(IdlRegistry::with_rpc_url(url));
+            unsafe {
+                std::env::remove_var("AGENTGEYSER_IDL_FETCH_CONCURRENCY");
+            }
+            registry
+        };
+        assert_eq!(registry.idl_fetch_semaphore.available_permits(), 2);
+
+        let events = program_ids
+            .iter()
+            .map(|program_id| YellowstoneEvent::ProgramDeployed {
+                program_id: program_id.to_string(),
+            })
+            .collect();
+        registry
+            .attach_stream(MockYellowstoneStream::new(events))
+            .await
+            .unwrap();
+        let skills = wait_for_skill_count(&registry, program_ids.len()).await;
+
+        assert_eq!(skills.len(), program_ids.len());
+        assert!(
+            max_seen.load(Ordering::SeqCst) <= 2,
+            "observed more in-flight IDL fetches than configured"
+        );
     }
 
     #[tokio::test]
@@ -211,13 +460,13 @@ mod tests {
         let pid = "HELLO111111111111111111111111111111111111111";
         registry.insert_mock_idl(pid, sample_idl());
 
-        let stream = MockYellowstoneStream::new(vec![
-            YellowstoneEvent::ProgramDeployed { program_id: pid.into() },
-        ]);
+        let stream = MockYellowstoneStream::new(vec![YellowstoneEvent::ProgramDeployed {
+            program_id: pid.into(),
+        }]);
         let handle = registry.attach_stream(stream);
         handle.await.unwrap();
 
-        let skills = registry.list_skills();
+        let skills = wait_for_skill_count(&registry, 2).await;
         assert_eq!(skills.len(), 2);
         assert!(skills.iter().any(|s| s.instruction_name == "greet"));
     }
@@ -225,9 +474,9 @@ mod tests {
     #[tokio::test]
     async fn missing_idl_is_skipped_without_panic() {
         let registry = Arc::new(IdlRegistry::new());
-        let stream = MockYellowstoneStream::new(vec![
-            YellowstoneEvent::ProgramDeployed { program_id: "UNKNOWN".into() },
-        ]);
+        let stream = MockYellowstoneStream::new(vec![YellowstoneEvent::ProgramDeployed {
+            program_id: "UNKNOWN".into(),
+        }]);
         registry.attach_stream(stream).await.unwrap();
         assert!(registry.list_skills().is_empty());
     }
@@ -239,11 +488,11 @@ mod tests {
         let registry = Arc::new(IdlRegistry::with_rpc_url("http://127.0.0.1:1/"));
         let pid = "HELLO111111111111111111111111111111111111111";
         registry.insert_mock_idl(pid, sample_idl());
-        let stream = MockYellowstoneStream::new(vec![
-            YellowstoneEvent::ProgramDeployed { program_id: pid.into() },
-        ]);
+        let stream = MockYellowstoneStream::new(vec![YellowstoneEvent::ProgramDeployed {
+            program_id: pid.into(),
+        }]);
         registry.attach_stream(stream).await.unwrap();
-        let skills = registry.list_skills();
+        let skills = wait_for_skill_count(&registry, 2).await;
         assert_eq!(skills.len(), 2, "mock path must populate skills");
     }
 
@@ -269,14 +518,24 @@ mod tests {
             let (mut s, _) = listener.accept().await.unwrap();
             let _ = s.read(&mut [0u8; 4096]).await.unwrap();
             let body = format!("{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{\"context\":{{\"slot\":1}},\"value\":{{\"data\":[\"{}\",\"base64\"],\"executable\":false,\"lamports\":0,\"owner\":\"11111111111111111111111111111111\",\"rentEpoch\":0}}}}}}", b64);
-            let resp = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body);
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
             s.write_all(resp.as_bytes()).await.unwrap();
         });
-        let registry = Arc::new(IdlRegistry::with_rpc_url(format!("http://127.0.0.1:{}/", port)));
+        let registry = Arc::new(IdlRegistry::with_rpc_url(format!(
+            "http://127.0.0.1:{}/",
+            port
+        )));
         let pid = "11111111111111111111111111111111";
-        let stream = MockYellowstoneStream::new(vec![YellowstoneEvent::ProgramDeployed { program_id: pid.into() }]);
+        let stream = MockYellowstoneStream::new(vec![YellowstoneEvent::ProgramDeployed {
+            program_id: pid.into(),
+        }]);
         registry.attach_stream(stream).await.unwrap();
-        assert_eq!(registry.list_skills()[0].instruction_name, "ping");
+        let skills = wait_for_skill_count(&registry, 1).await;
+        assert_eq!(skills[0].instruction_name, "ping");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -301,7 +560,11 @@ mod tests {
             let (mut s, _) = listener.accept().await.unwrap();
             let _ = s.read(&mut [0u8; 4096]).await.unwrap();
             let body = format!("{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{\"context\":{{\"slot\":1}},\"value\":{{\"data\":[\"{}\",\"base64\"],\"executable\":false,\"lamports\":0,\"owner\":\"11111111111111111111111111111111\",\"rentEpoch\":0}}}}}}", b64);
-            let resp = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body);
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
             s.write_all(resp.as_bytes()).await.unwrap();
         });
         let registry = IdlRegistry::with_rpc_url(format!("http://127.0.0.1:{}/", port));

@@ -7,10 +7,10 @@
 use anyhow::Result;
 use clap::Parser;
 use mcp_server::{
+    transport::{run_http, Args, TransportKind},
     AgentGeyserMcpServer,
-    transport::{Args, TransportKind, run_http},
 };
-use rmcp::{ServiceExt, transport::stdio};
+use rmcp::{transport::stdio, ServiceExt};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

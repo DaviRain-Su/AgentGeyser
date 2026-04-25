@@ -65,7 +65,11 @@ pub fn build_anchor_unsigned_tx(
 
     let program_id = Pubkey::from_str(&skill.program_id)
         .map_err(|e| anyhow!("invalid program_id `{}`: {}", skill.program_id, e))?;
-    let ix = Instruction { program_id, accounts: metas, data };
+    let ix = Instruction {
+        program_id,
+        accounts: metas,
+        data,
+    };
     let msg = Message::new_with_blockhash(&[ix], Some(&payer), &blockhash);
     let tx = Transaction::new_unsigned(msg);
     bincode::serialize(&tx).context("bincode serialize transaction")
@@ -79,7 +83,11 @@ pub fn build_native_unsigned_tx(
     payer: Pubkey,
     blockhash: Hash,
 ) -> Result<Vec<u8>> {
-    let ix = Instruction { program_id, accounts: account_metas, data: ix_data };
+    let ix = Instruction {
+        program_id,
+        accounts: account_metas,
+        data: ix_data,
+    };
     let msg = Message::new_with_blockhash(&[ix], Some(&payer), &blockhash);
     let tx = Transaction::new_unsigned(msg);
     bincode::serialize(&tx).context("bincode serialize transaction")
@@ -116,19 +124,27 @@ fn encode_borsh_arg(out: &mut Vec<u8>, arg: &SkillArgSpec, v: &Value) -> Result<
         }
         IdlType::U64 => BorshSerialize::serialize(&as_u64(v, &arg.name)?, out)?,
         IdlType::I64 => {
-            let n = v.as_i64().ok_or_else(|| anyhow!("arg `{}` expected i64", arg.name))?;
+            let n = v
+                .as_i64()
+                .ok_or_else(|| anyhow!("arg `{}` expected i64", arg.name))?;
             BorshSerialize::serialize(&n, out)?;
         }
         IdlType::Bool => {
-            let b = v.as_bool().ok_or_else(|| anyhow!("arg `{}` expected bool", arg.name))?;
+            let b = v
+                .as_bool()
+                .ok_or_else(|| anyhow!("arg `{}` expected bool", arg.name))?;
             BorshSerialize::serialize(&b, out)?;
         }
         IdlType::String => {
-            let s = v.as_str().ok_or_else(|| anyhow!("arg `{}` expected string", arg.name))?;
+            let s = v
+                .as_str()
+                .ok_or_else(|| anyhow!("arg `{}` expected string", arg.name))?;
             BorshSerialize::serialize(&s.to_string(), out)?;
         }
         IdlType::Pubkey => {
-            let s = v.as_str().ok_or_else(|| anyhow!("arg `{}` expected base58 pubkey", arg.name))?;
+            let s = v
+                .as_str()
+                .ok_or_else(|| anyhow!("arg `{}` expected base58 pubkey", arg.name))?;
             let pk = Pubkey::from_str(s)
                 .map_err(|e| anyhow!("arg `{}` invalid pubkey: {}", arg.name, e))?;
             out.extend_from_slice(&pk.to_bytes());
@@ -137,7 +153,9 @@ fn encode_borsh_arg(out: &mut Vec<u8>, arg: &SkillArgSpec, v: &Value) -> Result<
             // Encoded as Borsh `Vec<u8>` (u32 LE length + bytes). For Bytes
             // args we accept a JSON array of u8 to avoid bringing in a base64
             // dep just for tests.
-            let arr = v.as_array().ok_or_else(|| anyhow!("arg `{}` expected u8 array", arg.name))?;
+            let arr = v
+                .as_array()
+                .ok_or_else(|| anyhow!("arg `{}` expected u8 array", arg.name))?;
             let raw: Vec<u8> = arr
                 .iter()
                 .map(|x| x.as_u64().and_then(|n| u8::try_from(n).ok()))
@@ -150,7 +168,8 @@ fn encode_borsh_arg(out: &mut Vec<u8>, arg: &SkillArgSpec, v: &Value) -> Result<
 }
 
 fn as_u64(v: &Value, name: &str) -> Result<u64> {
-    v.as_u64().ok_or_else(|| anyhow!("arg `{}` expected unsigned integer", name))
+    v.as_u64()
+        .ok_or_else(|| anyhow!("arg `{}` expected unsigned integer", name))
 }
 
 #[cfg(test)]
@@ -159,7 +178,9 @@ mod tests {
     use sha2::{Digest, Sha256};
     use skill_synth::SkillAccountSpec;
 
-    fn pk(b: u8) -> Pubkey { Pubkey::new_from_array([b; 32]) }
+    fn pk(b: u8) -> Pubkey {
+        Pubkey::new_from_array([b; 32])
+    }
 
     fn greet_skill() -> Skill {
         let mut h = Sha256::new();
@@ -173,8 +194,15 @@ mod tests {
             instruction_name: "greet".into(),
             params_schema: serde_json::json!({}),
             discriminator: disc,
-            accounts: vec![SkillAccountSpec { name: "user".into(), is_mut: true, is_signer: true }],
-            args: vec![SkillArgSpec { name: "name".into(), ty: IdlType::String }],
+            accounts: vec![SkillAccountSpec {
+                name: "user".into(),
+                is_mut: true,
+                is_signer: true,
+            }],
+            args: vec![SkillArgSpec {
+                name: "name".into(),
+                ty: IdlType::String,
+            }],
         }
     }
 
@@ -189,7 +217,8 @@ mod tests {
             &named,
             pk(1),
             Hash::new_from_array([0u8; 32]),
-        ).expect("build ok");
+        )
+        .expect("build ok");
 
         let tx: Transaction = bincode::deserialize(&bytes).expect("deserialize");
         let ix = &tx.message.instructions[0];
@@ -217,7 +246,8 @@ mod tests {
             metas,
             pk(12),
             Hash::new_from_array([0u8; 32]),
-        ).expect("build ok");
+        )
+        .expect("build ok");
         let tx: Transaction = bincode::deserialize(&bytes).expect("deserialize");
         assert_eq!(
             tx.message.instructions[0].data,
@@ -235,7 +265,8 @@ mod tests {
             &named,
             pk(1),
             Hash::new_from_array([0u8; 32]),
-        ).expect_err("should fail");
+        )
+        .expect_err("should fail");
         assert!(format!("{err}").contains("missing account"));
     }
 }

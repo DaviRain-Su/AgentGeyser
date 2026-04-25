@@ -10,6 +10,9 @@ members = [
 exclude = ["examples/anchor-hello-world/programs/hello_world"]
 resolver = "2"
 
+[workspace.package]
+version = "0.3.0-alpha.0"
+
 [workspace.dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
 axum = "0.7"

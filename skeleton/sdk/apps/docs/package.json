@@ -1,6 +1,6 @@
 {
   "name": "@agentgeyser/docs",
-  "version": "0.0.0",
+  "version": "0.3.0-alpha.0",
   "private": true,
   "scripts": {
     "prebuild": "typedoc",

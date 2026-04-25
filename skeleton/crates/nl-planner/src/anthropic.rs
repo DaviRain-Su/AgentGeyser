@@ -55,8 +55,7 @@ pub struct AnthropicMessagesProvider {
 impl AnthropicMessagesProvider {
     /// Construct a provider pointed at the vanilla Anthropic cloud endpoint.
     pub fn anthropic_default(api_key: String) -> Self {
-        Self::try_anthropic_default(api_key)
-            .expect("Anthropic HTTP client with timeout builds")
+        Self::try_anthropic_default(api_key).expect("Anthropic HTTP client with timeout builds")
     }
 
     pub fn try_anthropic_default(api_key: String) -> Result<Self, PlanError> {
@@ -71,8 +70,7 @@ impl AnthropicMessagesProvider {
 
     /// Construct a provider pointed at the Kimi-for-coding endpoint.
     pub fn kimi_coding_default(api_key: String) -> Self {
-        Self::try_kimi_coding_default(api_key)
-            .expect("Anthropic HTTP client with timeout builds")
+        Self::try_kimi_coding_default(api_key).expect("Anthropic HTTP client with timeout builds")
     }
 
     pub fn try_kimi_coding_default(api_key: String) -> Result<Self, PlanError> {
@@ -116,7 +114,9 @@ impl AnthropicMessagesProvider {
     }
 
     fn http_client() -> Result<reqwest::Client, PlanError> {
-        reqwest::Client::builder().timeout(Duration::from_secs(30)).build()
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
             .map_err(PlanError::Http)
     }
 

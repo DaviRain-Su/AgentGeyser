@@ -59,6 +59,17 @@ user secret.
   only honors the root `.github/workflows/` directory.
 - Removed the unused `zod` dependency from `@agentgeyser/sdk`.
 
+## 0.3.0-alpha.0 — MVP-M6
+
+### Added
+- Wired the opt-in `live-yellowstone` ingestion path to real Yellowstone gRPC
+  subscriptions, bounded Anchor IDL fetches, and auto-skill registration.
+- Documented the split Yellowstone env vars and IDL fetch concurrency override.
+
+### Fixed
+- Anchor IDL fetches now query the IDL PDA with primary and legacy fallback
+  derivations, allowing mainnet Anchor deployments to surface in `ag_listSkills`.
+
 ## [0.2.0-alpha.0] - 2026-04-24
 
 ### Added
